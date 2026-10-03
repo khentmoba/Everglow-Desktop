@@ -1,0 +1,17 @@
+{
+  "results": [
+    "uBO Complete mode: cosmetic ads hidden in top page and cross-origin iframe",
+    "Real bundled filemoon.* scriptlet aborted an ad-script property access in cross-origin iframe",
+    "Native blocking: top-page and cross-origin iframe ad scripts blocked before network",
+    "Native blocking: fetch replaced by HTTP 204; no server request",
+    "Popup denied: no new browser/webview target",
+    "Remote page cannot forge the trusted extension startup message",
+    "External top-level navigation denied",
+    "Remote page cannot invoke privileged Tauri commands",
+    "Video element fullscreen entered and exited",
+    "Native menu pauses and restores BOTH blocking layers"
+  ],
+  "adHitsWhileProtected": 0,
+  "adHitsWhilePaused": 3,
+  "checkedAt": "2026-10-03T17:53:42.286Z"
+}
