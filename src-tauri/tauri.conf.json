@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Everglow Desktop",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "identifier": "com.everglow.desktop",
   "build": {
     "frontendDist": "../ui"
@@ -14,6 +14,7 @@
   },
   "bundle": {
     "active": true,
+    "createUpdaterArtifacts": true,
     "resources": { "../vendor/ubol/": "ubol/" },
     "targets": [
       "nsis"
@@ -22,5 +23,18 @@
       "icons/icon.ico",
       "icons/icon.png"
     ]
+  },
+  "plugins": {
+    "updater": {
+      "active": true,
+      "dialog": false,
+      "endpoints": [
+        "https://github.com/khentmoba/Everglow-Desktop/releases/latest/download/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDU2MjQwQkQzRUVGMEU2QkYKUldTLzV2RHUwd3NrVnJaR01uQkZHMzNKdWJGSC93NnNBQzY3U1VMTUR1UlJhUjQxenpZUGd0bm8K",
+      "windows": {
+        "installMode": "passive"
+      }
+    }
   }
 }

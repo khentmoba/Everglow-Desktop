@@ -1,3 +1,8 @@
 node_modules/
 src-tauri/target/
 *.log
+# Tauri update signing key. The public key lives in
+# src-tauri/tauri.conf.json; the private key must never be committed.
+# It is stored as the TAURI_SIGNING_PRIVATE_KEY GitHub secret.
+.tauri-signing.key
+.tauri-signing.key.pub

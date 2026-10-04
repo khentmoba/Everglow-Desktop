@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 mod blocker;
 mod extension;
+mod updater;
 use blocker::{allow_navigation, Blocker, HOME};
 use std::sync::{atomic::Ordering, Arc};
 use tauri::{
@@ -104,7 +105,10 @@ fn main() {
     // Verification uses fake local pages and a separate profile; normal runs expose no debug port.
     let verify_live = std::env::args().any(|arg| arg == "--verify-live");
     let verify = verify_live || std::env::args().any(|arg| arg == "--verify");
-    tauri::Builder::default().setup(move |app| {
+    tauri::Builder::default()
+    .plugin(tauri_plugin_updater::Builder::new().build())
+    .plugin(tauri_plugin_dialog::init())
+    .setup(move |app| {
         let data = app.path().app_local_data_dir()?;
         std::fs::create_dir_all(&data)?;
         let cache = data.join("adblock-lists.txt");
@@ -114,9 +118,11 @@ fn main() {
         let reload = MenuItem::with_id(app, "reload", "Refresh Everglow", true, Some("Ctrl+R"))?;
         let fullscreen = MenuItem::with_id(app, "fullscreen", "Fullscreen", true, Some("F11"))?;
         let status = MenuItem::with_id(app, "status", "Protection status", true, None::<&str>)?;
+        let check_updates = MenuItem::with_id(app, "check_updates", "Check for Updates…", true, None::<&str>)?;
         let separator = PredefinedMenuItem::separator(app)?;
+        let separator2 = PredefinedMenuItem::separator(app)?;
         let quit = PredefinedMenuItem::quit(app, Some("Close Everglow"))?;
-        let submenu = Submenu::with_items(app, "Everglow", true, &[&home, &reload, &fullscreen, &separator, &adblock, &status, &quit])?;
+        let submenu = Submenu::with_items(app, "Everglow", true, &[&home, &reload, &fullscreen, &separator, &adblock, &status, &check_updates, &separator2, &quit])?;
         let menu = Menu::with_items(app, &[&submenu])?;
         let popup_blocker = Arc::clone(&blocker);
         let extension_path = if cfg!(debug_assertions) {
@@ -149,11 +155,15 @@ fn main() {
                 },
                 "status" => window.set_title(&format!("Everglow Desktop — {} requests blocked · {} popups stopped",
                     menu_blocker.blocked.load(Ordering::Relaxed), menu_blocker.popups.load(Ordering::Relaxed))),
+                "check_updates" => {
+                    updater::check_for_updates(native_window.app_handle(), true);
+                    Ok(())
+                },
                 _ => Ok(()),
             };
             if let Err(err) = result { eprintln!("Desktop menu: {err}"); }
         });
-        let updater = Arc::clone(&blocker);
+        let lists = Arc::clone(&blocker);
         let start_window = window.clone();
         let app_handle = app.handle().clone();
         window.with_webview(move |view| {
@@ -169,7 +179,8 @@ fn main() {
                 eprintln!("Install extension: {err}"); app_handle.exit(1);
             }
         })?;
-        if !verify { updater.refresh(cache); }
+        if !verify { lists.refresh(cache); }
+        updater::check_on_startup(app.handle(), verify);
         Ok(())
     }).run(tauri::generate_context!()).expect("Everglow Desktop could not start");
 }

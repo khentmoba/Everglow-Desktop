@@ -1,6 +1,6 @@
 [package]
 name = "everglow-desktop"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 description = "Everglow live-site desktop app with native ad and popup blocking"
 
@@ -12,6 +12,9 @@ tauri = { version = "2", features = [] }
 adblock = { version = "0.12", default-features = false, features = ["embedded-domain-resolver", "full-regex-handling"] }
 ureq = "3"
 url = "2"
+tauri-plugin-updater = "2"
+tauri-plugin-dialog = "2"
+serde_json = "1.0.151"
 
 [target.'cfg(windows)'.dependencies]
 webview2-com = "0.39"

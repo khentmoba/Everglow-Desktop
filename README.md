@@ -21,7 +21,9 @@ Menu: **Everglow → Block ads and trackers** pauses/resumes both blocking layer
 ## Updates
 Everglow loads from the live website, not a frozen Flutter bundle. Its existing update banner still works: restart/refresh when it offers a newer build; movies are not forcefully interrupted.
 
-The native lists update automatically. The desktop executable and bundled uBO Lite release do **not** yet have a signed auto-updater; updating those requires a new installer. uBO Lite's bundled lists/scriptlets update with that release.
+The desktop app itself updates natively since 0.2.0: about 10 seconds after launch it checks the GitHub release feed for a newer signed version and asks whether to install it (passive installer, the app restarts itself when done). **Everglow → Check for Updates…** checks on demand. Installs are signature-verified before they run.
+
+Releases are built and signed by GitHub Actions when a `v*` tag is pushed (`git tag v0.2.0 && git push origin v0.2.0`). The private signing key lives only in the `TAURI_SIGNING_PRIVATE_KEY` repo secret; the public key is baked into `src-tauri/tauri.conf.json`. Note: 0.1.0 installs predate the updater, so they need one last manual install of 0.2.0+ — every install after that updates itself.
 
 ## Source/build
 Source is independent of the Everglow website at `C:\APPLICATIONS\Everglow-Desktop`; no live website files were changed.

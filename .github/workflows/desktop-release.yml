@@ -1,0 +1,46 @@
+# Builds and publishes the signed Windows installer plus the signed
+# auto-update feed (`latest.json`) whenever a version tag is pushed.
+#
+#   git tag v0.2.0 && git push origin v0.2.0
+#
+# The desktop app checks
+# https://github.com/khentmoba/Everglow-Desktop/releases/latest/download/latest.json
+# on startup and offers to install matching signed releases.
+# Required repo secret: TAURI_SIGNING_PRIVATE_KEY (minisign private key,
+# no password). The public key is baked into src-tauri/tauri.conf.json.
+
+name: Desktop release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build and publish release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: Everglow Desktop ${{ github.ref_name }}
+          releaseDraft: false
+          prerelease: false
