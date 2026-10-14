@@ -34,7 +34,14 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build and publish release
+      - name: Check version and release tag
+        run: node --test scripts/release-contract.test.mjs
+
+      - name: Check desktop update boundaries
+        working-directory: src-tauri
+        run: cargo test
+
+      - name: Build signed draft release
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -42,5 +49,28 @@ jobs:
         with:
           tagName: ${{ github.ref_name }}
           releaseName: Everglow Desktop ${{ github.ref_name }}
-          releaseDraft: false
+          releaseDraft: true
           prerelease: false
+
+      - name: Add stable installer link and publish complete release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $installers = @(Get-ChildItem src-tauri/target/release/bundle/nsis/*-setup.exe)
+          if ($installers.Count -ne 1) { throw 'Expected exactly one Windows installer' }
+          $stableInstaller = Join-Path $env:RUNNER_TEMP 'Everglow-Desktop-Setup.exe'
+          Copy-Item -LiteralPath $installers[0].FullName -Destination $stableInstaller
+          gh release upload $env:GITHUB_REF_NAME $stableInstaller --clobber
+          if ($LASTEXITCODE -ne 0) { throw 'Stable installer upload failed' }
+          $assets = gh release view $env:GITHUB_REF_NAME --json assets | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0) { throw 'Could not inspect release assets' }
+          foreach ($required in @('latest.json', 'Everglow-Desktop-Setup.exe')) {
+            if ($required -notin $assets.assets.name) { throw "Missing release asset: $required" }
+          }
+          # GitHub normalizes spaces in uploaded asset names; match the suffix.
+          if (-not ($assets.assets.name | Where-Object { $_ -like '*_x64-setup.exe.sig' })) {
+            throw 'Missing Windows updater signature'
+          }
+          gh release edit $env:GITHUB_REF_NAME --draft=false --latest
+          if ($LASTEXITCODE -ne 0) { throw 'Release publication failed' }

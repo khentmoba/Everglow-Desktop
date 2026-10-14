@@ -1,5 +1,6 @@
 {
   "results": [
+    "Untrusted local page receives no desktop update bridge",
     "uBO Complete mode: cosmetic ads hidden in top page and cross-origin iframe",
     "Real bundled filemoon.* scriptlet aborted an ad-script property access in cross-origin iframe",
     "Native blocking: top-page and cross-origin iframe ad scripts blocked before network",
@@ -9,9 +10,10 @@
     "External top-level navigation denied",
     "Remote page cannot invoke privileged Tauri commands",
     "Video element fullscreen entered and exited",
-    "Native menu pauses and restores BOTH blocking layers"
+    "Native menu pauses and restores BOTH blocking layers",
+    "Trusted synthetic production-origin page receives version and fixed update action; verification never checks live feed"
   ],
   "adHitsWhileProtected": 0,
   "adHitsWhilePaused": 3,
-  "checkedAt": "2026-10-04T18:55:34.497Z"
+  "checkedAt": "2026-10-14T02:16:28.576Z"
 }

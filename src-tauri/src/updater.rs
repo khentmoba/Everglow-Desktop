@@ -1,17 +1,28 @@
-//! Native auto-updates for Everglow Desktop.
-//!
-//! The app checks the GitHub release feed on startup and offers to download
-//! and install new versions, so nobody has to pass installers around by hand.
-//! Installs are signature-verified against the public key in
-//! `tauri.conf.json` before they run.
-
-use std::time::Duration;
-use tauri::{AppHandle, Runtime};
+//! Native, signature-verified updates. Download first; restart only by choice.
+use std::{
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Mutex,
+    },
+    time::Duration,
+};
+use tauri::{AppHandle, Manager, Runtime};
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
-use tauri_plugin_updater::UpdaterExt;
+use tauri_plugin_updater::{Update, UpdaterExt};
 
-/// Seconds to wait after startup before checking, so the app is visible first.
-const STARTUP_DELAY_SECS: u64 = 10;
+#[derive(Default)]
+pub struct UpdateState {
+    busy: Arc<AtomicBool>,
+    // Session-only: a restart discards the staged download and checks again.
+    ready: Mutex<Option<(Update, Vec<u8>)>>,
+}
+
+struct BusyGuard(Arc<AtomicBool>);
+impl Drop for BusyGuard {
+    fn drop(&mut self) {
+        self.0.store(false, Ordering::Release);
+    }
+}
 
 fn tell<R: Runtime>(app: &AppHandle<R>, message: &str) {
     app.dialog()
@@ -22,76 +33,153 @@ fn tell<R: Runtime>(app: &AppHandle<R>, message: &str) {
         .blocking_show();
 }
 
-/// Check for updates. When `interactive` the user always hears back
-/// (menu clicks); the silent startup check only speaks when an update exists.
+fn ask<R: Runtime>(app: &AppHandle<R>, message: String, accept: &str) -> bool {
+    app.dialog()
+        .message(message)
+        .title("Everglow Desktop update")
+        .kind(MessageDialogKind::Info)
+        .buttons(MessageDialogButtons::OkCancelCustom(
+            accept.to_owned(),
+            "Later".to_owned(),
+        ))
+        .blocking_show()
+}
+
 pub fn check_for_updates<R: Runtime>(app: &AppHandle<R>, interactive: bool) {
+    let state = app.state::<UpdateState>();
+    if state
+        .busy
+        .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+        .is_err()
+    {
+        return;
+    }
+    let guard = BusyGuard(state.busy.clone());
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
-        let update = match app.updater() {
-            Ok(updater) => match updater.check().await {
-                Ok(found) => found,
-                Err(err) => {
-                    eprintln!("Update check failed: {err}");
-                    if interactive {
-                        tell(&app, "Could not check for updates. Please try again later.");
-                    }
-                    return;
-                }
-            },
-            Err(err) => {
-                eprintln!("Updater unavailable: {err}");
-                if interactive {
-                    tell(&app, "Updates are not available in this build.");
-                }
-                return;
-            }
-        };
-        let Some(update) = update else {
+        let _guard = guard;
+        let window = app.get_webview_window("main");
+        let original_title = window.as_ref().and_then(|w| w.title().ok());
+        if let Err(err) = prepare_update(&app, interactive).await {
+            eprintln!("Desktop update failed: {err}");
             if interactive {
-                tell(&app, "You're on the latest version.");
+                tell(&app, "Could not prepare the update. Your current app is unchanged. Please try again.");
             }
-            return;
-        };
-        let notes = update.body.as_deref().unwrap_or("Bug fixes and improvements.");
-        let install = app
-            .dialog()
-            .message(format!(
-                "Everglow Desktop {} is available.\n\n{notes}\n\nDownload and install it now?",
-                update.version
-            ))
-            .title("Everglow Desktop update")
-            .kind(MessageDialogKind::Info)
-            .buttons(MessageDialogButtons::OkCancelCustom(
-                "Install now".to_owned(),
-                "Later".to_owned(),
-            ))
-            .blocking_show();
-        if !install {
-            return;
         }
-        if let Err(err) = update.download_and_install(|_, _| {}, || {}).await {
-            eprintln!("Update install failed: {err}");
-            tell(
-                &app,
-                "The update could not be installed. Please try again later.",
-            );
-            return;
+        let state = app.state::<UpdateState>();
+        let ready = state.ready.lock().unwrap().take();
+        if let Some((update, bytes)) = ready {
+            if ask(&app, format!("Everglow Desktop {} is downloaded and verified. Restart to install it?\n\nChoose Later to keep watching. Use Check for Updates when you are ready.", update.version), "Restart to update") {
+                if let Err(err) = update.install(&bytes) {
+                    eprintln!("Update install failed: {err}");
+                    tell(&app, "Could not install the update. Your download is still ready; please try again.");
+                    *state.ready.lock().unwrap() = Some((update, bytes));
+                } else {
+                    // Windows exits into NSIS; other paths need an explicit relaunch.
+                    app.restart();
+                }
+            } else {
+                *state.ready.lock().unwrap() = Some((update, bytes));
+            }
         }
-        // On Windows `install` already exits into the NSIS installer, which
-        // relaunches the app when done. This is the fallback for other paths.
-        app.restart();
+        if let Some(window) = window {
+            let title = if state.ready.lock().unwrap().is_some() {
+                "Everglow Desktop - update ready".to_owned()
+            } else {
+                original_title.unwrap_or_else(|| "Everglow Desktop - protected".to_owned())
+            };
+            if let Err(err) = window.set_title(&title) {
+                eprintln!("Update title: {err}");
+            }
+        }
     });
 }
 
-/// Silent startup check. Verification runs use fake pages and isolated
-/// profiles, so they never phone home.
+async fn prepare_update<R: Runtime>(
+    app: &AppHandle<R>,
+    interactive: bool,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    if app.state::<UpdateState>().ready.lock().unwrap().is_some() {
+        return Ok(());
+    }
+    let Some(update) = app
+        .updater_builder()
+        .timeout(Duration::from_secs(15 * 60))
+        .build()?
+        .check()
+        .await?
+    else {
+        if interactive {
+            tell(app, "You're on the latest desktop version.");
+        }
+        return Ok(());
+    };
+    let notes = update
+        .body
+        .as_deref()
+        .unwrap_or("Bug fixes and improvements.");
+    if !ask(app, format!("Everglow Desktop {} is available.\n\n{notes}\n\nDownload it now? You can choose when to restart.", update.version), "Download update") {
+        return Ok(());
+    }
+    let mut downloaded = 0_u64;
+    let mut last_percent = None;
+    let bytes = update
+        .download(
+            |chunk, total| {
+                downloaded += chunk as u64;
+                let percent = total
+                    .filter(|n| *n > 0)
+                    .map(|n| (downloaded.saturating_mul(100) / n).min(100));
+                if percent != last_percent || last_percent.is_none() {
+                    last_percent = percent;
+                    if let Some(window) = app.get_webview_window("main") {
+                        let progress = percent.map_or_else(
+                            || format!("{} KB", downloaded / 1024),
+                            |n| format!("{n}%"),
+                        );
+                        if let Err(err) = window
+                            .set_title(&format!("Everglow Desktop - downloading update {progress}"))
+                        {
+                            eprintln!("Download progress: {err}");
+                        }
+                    }
+                }
+            },
+            || {},
+        )
+        .await?;
+    // download() verifies the Tauri signature before returning these bytes.
+    *app.state::<UpdateState>().ready.lock().unwrap() = Some((update, bytes));
+    Ok(())
+}
+
 pub fn check_on_startup<R: Runtime>(app: &AppHandle<R>, verify: bool) {
     if verify {
         return;
     }
     let app = app.clone();
     std::thread::spawn(move || {
-        std::thread::sleep(Duration::from_secs(STARTUP_DELAY_SECS));
+        std::thread::sleep(Duration::from_secs(10));
         check_for_updates(&app, false);
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn only_one_update_flow_runs_and_errors_release_the_lock() {
+        let state = UpdateState::default();
+        assert!(state
+            .busy
+            .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+            .is_ok());
+        let guard = BusyGuard(state.busy.clone());
+        assert!(state
+            .busy
+            .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+            .is_err());
+        drop(guard);
+        assert!(!state.busy.load(Ordering::Acquire));
+    }
 }

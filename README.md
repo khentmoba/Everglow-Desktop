@@ -5,7 +5,7 @@ Windows Tauri 2 app loading https://everglow-1c6db.web.app/ in its own window.
 ## Use
 Open **Everglow Desktop** on the desktop or Start menu. Sign in normally; this app has its own persistent browser profile and does not borrow browser cookies.
 
-Menu: **Everglow → Block ads and trackers** pauses/resumes both blocking layers (and reloads the page). Popups and external top-level redirects remain denied even when ad blocking is paused. **F11** toggles fullscreen; **Refresh Everglow** reloads the site.
+Menu: **Everglow â†’ Block ads and trackers** pauses/resumes both blocking layers (and reloads the page). Popups and external top-level redirects remain denied even when ad blocking is paused. **F11** toggles fullscreen; **Refresh Everglow** reloads the site.
 
 ## Blocking
 - Brave's open-source `adblock-rust` matcher with bundled EasyList and EasyPrivacy.
@@ -14,16 +14,24 @@ Menu: **Everglow → Block ads and trackers** pauses/resumes both blocking layer
 - Native interception covers document/iframe/service-worker/shared-worker request sources.
 - Only our bundled extension is enabled/disabled by the menu, not WebView2's built-in PDF extension.
 - The app waits for the extension's initial filter/script registration before opening Everglow.
-- Remote pages receive no Tauri capabilities. Navigation is limited to Everglow and installed extension pages. The startup handshake accepts only the exact local extension page, not messages from the website.
+- Remote pages receive no Tauri capabilities. A main-document WebView2 bridge accepts only a fixed update-check message from the exact production Everglow origin. It accepts no installer URLs or other native commands. Navigation remains limited to Everglow and installed extension pages; the extension startup handshake is unchanged.
 
 **This is strong layered ad blocking, not an identical implementation of Brave Shields.** WebView2 is not Brave. Browser-level fingerprint protection, CNAME uncloaking, all Brave-specific heuristics and every streaming site's anti-adblock behavior are not guaranteed.
 
 ## Updates
 Everglow loads from the live website, not a frozen Flutter bundle. Its existing update banner still works: restart/refresh when it offers a newer build; movies are not forcefully interrupted.
 
-The desktop app itself updates natively since 0.2.0: about 10 seconds after launch it checks the GitHub release feed for a newer signed version and asks whether to install it (passive installer, the app restarts itself when done). **Everglow → Check for Updates…** checks on demand. Installs are signature-verified before they run.
+The desktop app itself updates natively since 0.2.0. Version 0.3.0 connects the website entrance and Dashboard to that same updater. It checks about 10 seconds after launch, or on demand through **Everglow > Check for Updates** and the website's **Check for desktop updates** button.
 
-Releases are built and signed by GitHub Actions when a `v*` tag is pushed (`git tag v0.2.0 && git push origin v0.2.0`). To ship an update: bump the version in `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml`, and `package.json` (all three must match), commit, then tag and push the tag. The private signing key lives only in the `TAURI_SIGNING_PRIVATE_KEY` repo secret plus a local backup at `.tauri-signing.key` (gitignored, never commit it); the public key is baked into `src-tauri/tauri.conf.json`. Note: 0.1.0 installs predate the updater, so they need one last manual install of 0.2.0+ — every install after that updates itself.
+The user approves the download first. Progress appears in the window title. After signature verification, **Restart to update** installs it; **Later** keeps the verified download in memory for this session, without interrupting playback. Check for Updates offers the prepared update again. Closing the app discards that staged download; next launch checks afresh. Duplicate requests cannot start simultaneous downloads. An unsuccessful download never runs an installer.
+
+Desktop and website versions are separate. The desktop bridge reports the native package version, not the live website version. Only the top-level production page gets the bridge; player frames, local verification pages and third-party origins cannot use it. Verification mode never checks the real update feed.
+
+Releases build and sign in GitHub Actions on a `v*` tag. Keep `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml`, `package.json` and their lockfiles in sync; `node --test scripts/release-contract.test.mjs` checks this. Push the reviewed release tag after merging. The workflow prepares a draft, adds `Everglow-Desktop-Setup.exe`, verifies required assets, then publishes. Updater packages keep their versioned filenames and signatures.
+
+Stable website download: https://github.com/khentmoba/Everglow-Desktop/releases/latest/download/Everglow-Desktop-Setup.exe
+
+**Rollout order:** merge and release desktop 0.3.0 first; verify that the stable installer and `latest.json` are anonymously accessible; then merge the website buttons. Existing 0.2.0 users get 0.3.0 through the native menu/startup updater. Version 0.1.0 has no updater and needs one manual installation. The updater signature is separate from Windows Authenticode; this project does not claim a Windows-code-signed installer. Preserve the existing signing key in the repository secret; never rotate it as part of this feature.
 
 ## Source/build
 Source is independent of the Everglow website at `C:\APPLICATIONS\Everglow-Desktop`; no live website files were changed.
@@ -42,7 +50,7 @@ npm test
 npm run build
 ```
 
-Installer: `src-tauri/target/release/bundle/nsis/Everglow Desktop_0.1.0_x64-setup.exe`.
+Installer: `src-tauri/target/release/bundle/nsis/*-setup.exe`; releases also include the stable download filename above.
 
 The installer is a local unsigned build, not a public Windows-code-signed release.
 

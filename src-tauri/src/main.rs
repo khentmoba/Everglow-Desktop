@@ -2,6 +2,7 @@
 mod blocker;
 mod extension;
 mod updater;
+mod website_bridge;
 use blocker::{allow_navigation, Blocker, HOME};
 use std::sync::{atomic::Ordering, Arc};
 use tauri::{
@@ -108,6 +109,7 @@ fn main() {
     tauri::Builder::default()
     .plugin(tauri_plugin_updater::Builder::new().build())
     .plugin(tauri_plugin_dialog::init())
+    .manage(updater::UpdateState::default())
     .setup(move |app| {
         let data = app.path().app_local_data_dir()?;
         std::fs::create_dir_all(&data)?;
@@ -132,6 +134,7 @@ fn main() {
             .title("Everglow Desktop — protected")
             .inner_size(1280.0, 850.0).min_inner_size(420.0, 600.0)
             .menu(menu).visible(false).browser_extensions_enabled(true)
+            .initialization_script(website_bridge::SCRIPT.replace("__VERSION__", env!("CARGO_PKG_VERSION")))
             .data_directory(data.join(if verify { format!("verification-profile-{}", std::process::id()) } else { "profile".to_owned() }))
             .on_navigation(move |url| allow_navigation(url, verify))
             .on_new_window(move |_, _| {
@@ -167,6 +170,11 @@ fn main() {
         let start_window = window.clone();
         let app_handle = app.handle().clone();
         window.with_webview(move |view| {
+            if let Err(err) = website_bridge::install(&view, start_window.clone(), verify) {
+                eprintln!("Unable to install desktop update bridge: {err}");
+                app_handle.exit(1);
+                return;
+            }
             let result = install_blocking(&view, blocker, start_window.clone());
             // Never load remote content before native protection is installed.
             if let Err(err) = result {
