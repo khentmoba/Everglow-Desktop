@@ -31,6 +31,21 @@ Releases build and sign in GitHub Actions on a `v*` tag. Keep `src-tauri/tauri.c
 
 Stable website download: https://github.com/khentmoba/Everglow-Desktop/releases/latest/download/Everglow-Desktop-Setup.exe
 
+### Installer updates (0.3.1)
+
+Opening a newer Windows installer detects the existing installation and shows one **Update** button. It replaces the app files in the registered location without launching the old uninstaller or asking for the folder again. Sign-in data and existing shortcuts stay in place. The same version offers **Repair**; an older installer refuses to downgrade. In-app updates retain the existing passive progress flow and signature verification. Uninstall remains available through Windows Settings.
+
+The custom NSIS template is based on `tauri-bundler 2.10.1`, shipped with the pinned Tauri CLI `2.12.1`. Changes are marked `EVERGLOW`. When upgrading the CLI, compare its bundled template with `src-tauri/windows/installer.nsi`; keep upstream fixes and re-run the installer checks. Tauri's MIT license is included beside the template.
+
+Test the installer without touching the real installation:
+
+```powershell
+npm run build -- --config scripts/installer-test.json
+./scripts/test-installer.ps1 -Installer 'src-tauri/target/release/bundle/nsis/Everglow Installer Test_0.3.1_x64-setup.exe'
+```
+
+This uses a separate product name, installation folder and fake data. It checks fresh install, passive upgrade without a usable old uninstaller, same-version repair, preserved data/shortcuts/location, and silent downgrade refusal. It never launches the installed app or reads a real session. Desktop PR CI builds and runs this fixture too.
+
 **Rollout order:** merge and release desktop 0.3.0 first; verify that the stable installer and `latest.json` are anonymously accessible; then merge the website buttons. Existing 0.2.0 users get 0.3.0 through the native menu/startup updater. Version 0.1.0 has no updater and needs one manual installation. The updater signature is separate from Windows Authenticode; this project does not claim a Windows-code-signed installer. Preserve the existing signing key in the repository secret; never rotate it as part of this feature.
 
 ## Source/build
