@@ -13,6 +13,9 @@ test('desktop package, lockfiles and native app advertise the same version', () 
   assert.equal(lock.packages[''].version, pkg.version);
   assert.equal(cargo.match(/^version = "([^"]+)"/m)[1], pkg.version);
   assert.equal(cargoLock.match(/name = "everglow-desktop"\r?\nversion = "([^"]+)"/)[1], pkg.version);
+  // The vendored NSIS template must be reviewed alongside bundler upgrades.
+  assert.equal(pkg.devDependencies['@tauri-apps/cli'], '2.12.1');
+  assert.equal(lock.packages['node_modules/@tauri-apps/cli'].version, '2.12.1');
   if (process.env.GITHUB_REF_TYPE === 'tag') {
     assert.equal(process.env.GITHUB_REF_NAME, `v${pkg.version}`);
   }

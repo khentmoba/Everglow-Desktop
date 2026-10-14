@@ -1,0 +1,8 @@
+{
+  "productName": "Everglow Installer Test",
+  "identifier": "com.everglow.installer-test",
+  "bundle": {
+    "publisher": "Everglow Installer Test",
+    "createUpdaterArtifacts": false
+  }
+}
