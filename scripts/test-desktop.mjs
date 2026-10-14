@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { spawn, execFileSync } from 'node:child_process';
-import { writeFileSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 let adHits = 0;
@@ -56,6 +56,9 @@ try {
     data.error ? waiter.reject(Error(JSON.stringify(data.error))) : waiter.resolve(data.result);
   });
   await cdp('Page.enable');
+  assert.equal(await evaluate('typeof window.__everglowCheckForUpdates'), 'undefined');
+  assert.equal(await evaluate('typeof window.__everglowDesktopVersion'), 'undefined');
+  results.push('Untrusted local page receives no desktop update bridge');
   await delay(1600);
   assert.equal(await evaluate("getComputedStyle(document.getElementById('cosmetic-ad')).display"), 'none', 'Complete mode must hide generic ad elements');
   await evaluate("document.querySelector('iframe').contentWindow.postMessage('inspect','*')");
@@ -115,6 +118,30 @@ try {
   assert.equal(await evaluate("getComputedStyle(document.getElementById('cosmetic-ad')).display"), 'none');
   assert.equal((await evaluate("fetch('/desktop-ad-probe-fetch').then(r=>r.status)")), 204);
   results.push('Native menu pauses and restores BOTH blocking layers');
+
+  // Render synthetic HTML at the trusted origin without requesting live data.
+  // Verification mode disables updater network calls even on this origin.
+  ws.addEventListener('message', async event => {
+    const message = JSON.parse(event.data);
+    if (message.method === 'Fetch.requestPaused') {
+      await cdp('Fetch.fulfillRequest', {
+        requestId: message.params.requestId,
+        responseCode: 200,
+        responseHeaders: [{ name: 'Content-Type', value: 'text/html' }],
+        body: Buffer.from('<!doctype html><title>Fake Everglow update bridge</title><p>Demo only</p>').toString('base64'),
+      });
+    }
+  });
+  await cdp('Fetch.enable', { patterns: [{ urlPattern: 'https://everglow-1c6db.web.app/*', resourceType: 'Document' }] });
+  await cdp('Page.navigate', { url: 'https://everglow-1c6db.web.app/desktop-bridge-demo' });
+  for (let n = 0; n < 50; n++) {
+    if (await evaluate('typeof window.__everglowCheckForUpdates') === 'function') break;
+    await delay(100);
+  }
+  assert.equal(await evaluate('window.__everglowDesktopVersion'), JSON.parse(readFileSync('package.json')).version);
+  assert.equal(await evaluate("window.__everglowCheckForUpdates(); 'requested'"), 'requested');
+  assert.equal(await evaluate("Object.getOwnPropertyDescriptor(window, '__everglowCheckForUpdates').writable"), false);
+  results.push('Trusted synthetic production-origin page receives version and fixed update action; verification never checks live feed');
 
   mkdirSync('evidence', { recursive: true });
   writeFileSync('evidence/native-verification.json', JSON.stringify({ results, adHitsWhileProtected: 0, adHitsWhilePaused: adHits, checkedAt: new Date().toISOString() }, null, 2));
