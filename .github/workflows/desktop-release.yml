@@ -37,6 +37,10 @@ jobs:
       - name: Check version and release tag
         run: node --test scripts/release-contract.test.mjs
 
+      - name: Check Discord notification
+        shell: pwsh
+        run: ./scripts/notify-discord.test.ps1
+
       - name: Check desktop update boundaries
         working-directory: src-tauri
         run: cargo test
@@ -74,3 +78,9 @@ jobs:
           }
           gh release edit $env:GITHUB_REF_NAME --draft=false --latest
           if ($LASTEXITCODE -ne 0) { throw 'Release publication failed' }
+
+      - name: Notify Discord
+        shell: pwsh
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: ./scripts/notify-discord.ps1
