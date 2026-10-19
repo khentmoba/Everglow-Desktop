@@ -9,11 +9,12 @@
     "Remote page cannot forge the trusted extension startup message",
     "External top-level navigation denied",
     "Remote page cannot invoke privileged Tauri commands",
-    "Video element fullscreen entered and exited",
+    "Repeated video fullscreen fills the monitor, hides the native menu and restores it on exit",
+    "Repeated F11 fullscreen hides the native menu and restores it on exit",
     "Native menu pauses and restores BOTH blocking layers",
     "Trusted synthetic production-origin page receives version and fixed update action; verification never checks live feed"
   ],
   "adHitsWhileProtected": 0,
   "adHitsWhilePaused": 3,
-  "checkedAt": "2026-10-14T02:16:28.576Z"
+  "checkedAt": "2026-10-19T13:25:27.387Z"
 }
