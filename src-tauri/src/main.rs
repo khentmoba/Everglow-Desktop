@@ -15,6 +15,15 @@ use webview2_com::{
 };
 use windows::core::{w, Interface, BOOL, PWSTR};
 
+fn set_fullscreen(window: &tauri::WebviewWindow, fullscreen: bool) -> tauri::Result<()> {
+    window.set_fullscreen(fullscreen)?;
+    if fullscreen {
+        window.hide_menu()
+    } else {
+        window.show_menu()
+    }
+}
+
 fn request_kind(context: COREWEBVIEW2_WEB_RESOURCE_CONTEXT) -> &'static str {
     match context {
         COREWEBVIEW2_WEB_RESOURCE_CONTEXT_DOCUMENT => "subdocument",
@@ -90,7 +99,7 @@ fn install_blocking(
                 if let Some(sender) = sender {
                     let mut fullscreen = BOOL::default();
                     sender.ContainsFullScreenElement(&mut fullscreen)?;
-                    if let Err(err) = fullscreen_window.set_fullscreen(fullscreen.as_bool()) {
+                    if let Err(err) = set_fullscreen(&fullscreen_window, fullscreen.as_bool()) {
                         eprintln!("Fullscreen: {err}");
                     }
                 }
@@ -149,7 +158,7 @@ fn main() {
             let result = match event.id().as_ref() {
                 "home" => window.navigate(HOME.parse().expect("home URL")),
                 "reload" => window.reload(),
-                "fullscreen" => window.is_fullscreen().and_then(|value| window.set_fullscreen(!value)),
+                "fullscreen" => window.is_fullscreen().and_then(|value| set_fullscreen(&window, !value)),
                 "adblock" => {
                     let enabled = adblock.is_checked().unwrap_or(true);
                     menu_blocker.enabled.store(enabled, Ordering::Relaxed);

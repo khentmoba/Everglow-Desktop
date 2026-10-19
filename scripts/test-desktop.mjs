@@ -96,16 +96,35 @@ try {
   assert.equal(await evaluate("window.__TAURI_INTERNALS__.invoke(\'plugin:window|set_title\', {label:\'main\',title:\'UNAUTHORIZED\'}).then(()=>false,()=>true)"), true);
   results.push('Remote page cannot invoke privileged Tauri commands');
 
-  await cdp('Browser.getWindowForTarget');
-  await evaluate("document.getElementById('video').requestFullscreen().then(()=>true)", { userGesture: true });
-  await delay(400);
-  assert.equal(await evaluate('!!document.fullscreenElement'), true);
-  await evaluate('document.exitFullscreen().then(()=>true)');
-  results.push('Video element fullscreen entered and exited');
+  const nativeWindow = (toggle = false) => {
+    const output = execFileSync('powershell', ['-NoProfile', '-File', 'scripts/fullscreen-window.ps1', '-AppProcessId', String(child.pid), ...(toggle ? ['-Toggle'] : [])], { encoding: 'utf8' });
+    return toggle ? undefined : JSON.parse(output);
+  };
+  assert.equal(nativeWindow().menuVisible, true);
+  for (let n = 0; n < 2; n++) {
+    await evaluate("document.getElementById('video').requestFullscreen().then(()=>true)", { userGesture: true });
+    await delay(400);
+    assert.equal(await evaluate('!!document.fullscreenElement'), true);
+    assert.deepEqual(nativeWindow(), { menuVisible: false, fillsMonitor: true }, 'Video fullscreen must hide the native menu and fill the monitor');
+    await evaluate('document.exitFullscreen().then(()=>true)');
+    await delay(400);
+    assert.equal(nativeWindow().menuVisible, true, 'Exiting video fullscreen must restore the menu');
+  }
+  results.push('Repeated video fullscreen fills the monitor, hides the native menu and restores it on exit');
+  for (let n = 0; n < 2; n++) {
+    nativeWindow(true);
+    await delay(400);
+    assert.deepEqual(nativeWindow(), { menuVisible: false, fillsMonitor: true }, 'F11 fullscreen must hide the native menu and fill the monitor');
+    nativeWindow(true);
+    await delay(400);
+    assert.equal(nativeWindow().menuVisible, true, 'F11 must exit fullscreen even with the menu hidden');
+  }
+  results.push('Repeated F11 fullscreen hides the native menu and restores it on exit');
 
   const toggle = () => execFileSync('powershell', ['-NoProfile', '-File', 'scripts/toggle-adblock.ps1', '-AppProcessId', String(child.pid)]);
   toggle();
   await delay(1800);
+  assert.equal(nativeWindow().menuVisible, true, 'Native menu must remain available after reloading');
   assert.notEqual(await evaluate("getComputedStyle(document.getElementById('cosmetic-ad')).display"), 'none');
   assert.equal((await evaluate("fetch('/desktop-ad-probe-fetch').then(r=>r.status)")), 200);
   assert(adHits > 0);
