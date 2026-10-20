@@ -1,8 +1,8 @@
 $ErrorActionPreference = 'Stop'
 $env:DISCORD_WEBHOOK_URL = 'https://discord.invalid/api/webhooks/test/token'
 $env:GITHUB_REPOSITORY = 'khentmoba/Everglow-Desktop'
-$env:GITHUB_REF_NAME = 'v0.4.0'
-$env:RELEASE_CHANGELOG = "- Auto-hiding top bar: Hover near top edge`n- Shortcut support: Ctrl+Shift+M"
+$env:GITHUB_REF_NAME = 'v0.4.1'
+$env:RELEASE_CHANGELOG = "- Menu dropdown: Matches top bar UI`n- Shortcut support: Ctrl+Shift+M"
 
 function Invoke-RestMethod {
     param($Uri, $Method, $ContentType, $Body)
@@ -13,16 +13,16 @@ function Invoke-RestMethod {
 $payload = [Text.Encoding]::UTF8.GetString($request.Body) | ConvertFrom-Json
 if ($request.Uri -ne "$env:DISCORD_WEBHOOK_URL`?wait=true") { throw 'Discord must confirm delivery' }
 if ($request.Method -ne 'Post' -or $request.ContentType -ne 'application/json') { throw 'Expected JSON POST' }
-if ($payload.content -notmatch 'New Release: \*\*Everglow Desktop v0.4.0\*\* is now available!') { throw 'Missing header' }
+if ($payload.content -notmatch 'New Release: \*\*Everglow Desktop v0.4.1\*\* is now available!') { throw 'Missing header' }
 if ($payload.embeds.Count -ne 1) { throw 'Expected exactly one embed' }
 
 $embed = $payload.embeds[0]
-if ($embed.title -ne 'Release: Everglow Desktop v0.4.0') { throw 'Missing or invalid embed title' }
+if ($embed.title -ne 'Release: Everglow Desktop v0.4.1') { throw 'Missing or invalid embed title' }
 if ($embed.color -ne 4363994) { throw 'Invalid embed color' }
 if ($embed.footer.text -ne 'Everglow Desktop Automated Release System') { throw 'Missing embed footer' }
 
 $versionField = $embed.fields | Where-Object { $_.name -eq 'Version' }
-if (-not $versionField -or $versionField.value -ne '`v0.4.0`') { throw 'Missing Version field' }
+if (-not $versionField -or $versionField.value -ne '`v0.4.1`') { throw 'Missing Version field' }
 
 $configField = $embed.fields | Where-Object { $_.name -eq 'Configuration' }
 if (-not $configField -or $configField.value -ne '`Release x64`') { throw 'Missing Configuration field' }
@@ -31,7 +31,7 @@ $installerField = $embed.fields | Where-Object { $_.name -like '*Installer*' }
 if (-not $installerField -or -not $installerField.value.Contains('Everglow-Desktop-Setup.exe')) { throw 'Missing Installer field' }
 
 $whatsNewField = $embed.fields | Where-Object { $_.name -eq "What's New" }
-if (-not $whatsNewField -or -not $whatsNewField.value.Contains('- Auto-hiding top bar')) { throw 'Missing What''s New field' }
+if (-not $whatsNewField -or -not $whatsNewField.value.Contains('- Menu dropdown')) { throw 'Missing What''s New field' }
 
 if ($payload.allowed_mentions.parse.Count -ne 0) { throw 'Mentions must be disabled' }
 
