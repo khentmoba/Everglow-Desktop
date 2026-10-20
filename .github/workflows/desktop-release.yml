@@ -84,4 +84,10 @@ jobs:
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: ./scripts/notify-discord.ps1
+        run: |
+          $installer = Join-Path $env:RUNNER_TEMP 'Everglow-Desktop-Setup.exe'
+          if (Test-Path $installer) {
+            ./scripts/notify-discord.ps1 -InstallerPath $installer
+          } else {
+            ./scripts/notify-discord.ps1
+          }
