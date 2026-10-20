@@ -123,6 +123,7 @@ try {
     assert.equal((await chromeState()).captionVisible, false, 'Leaving the bar hides title bar');
   }
   results.push('Animated title bar reveals at the top edge, stays usable on hover, and hides over content or outside the window');
+  await delay(200);
   const heightBeforeReveal = (await chromeState()).height;
   const midAnimation = await evaluate(`new Promise(resolve => {
     const host = document.querySelector('everglow-titlebar');
@@ -199,6 +200,35 @@ try {
     await movePointer('Content');
   }
   results.push('Repeated F11 fullscreen suppresses hover reveal and restores auto-hide on exit');
+
+  await movePointer('Top');
+  await evaluate("document.querySelector('everglow-titlebar').shadowRoot.querySelector('[data-action=menu]').click()");
+  await delay(200);
+  const dropdownInfo = await evaluate(`(() => {
+    const host = document.querySelector('everglow-titlebar');
+    const dropdown = host?.shadowRoot.querySelector('.dropdown');
+    const bar = host?.shadowRoot.querySelector('.bar');
+    const adblock = host?.shadowRoot.querySelector('[data-menu="adblock"]');
+    return {
+      isOpen: host?.hasAttribute('menu-open') && dropdown?.hasAttribute('open'),
+      dropdownBg: dropdown && getComputedStyle(dropdown).backgroundColor,
+      barBg: bar && getComputedStyle(bar).backgroundColor,
+      dropdownFont: dropdown && getComputedStyle(dropdown).fontFamily,
+      barFont: bar && getComputedStyle(bar).fontFamily,
+      adblockChecked: adblock?.getAttribute('aria-checked'),
+      itemCount: host?.shadowRoot.querySelectorAll('.menu-item').length
+    };
+  })()`);
+  assert.equal(dropdownInfo.isOpen, true, 'Dropdown opens on menu click');
+  assert.equal(dropdownInfo.dropdownBg, dropdownInfo.barBg, 'Dropdown background matches top bar UI');
+  assert.equal(dropdownInfo.dropdownFont, dropdownInfo.barFont, 'Dropdown typography matches top bar UI');
+  assert.equal(dropdownInfo.adblockChecked, 'true', 'Adblock checkmark is visible initially');
+  assert.equal(dropdownInfo.itemCount, 7, 'Dropdown has all 7 menu items');
+  writeFileSync('evidence/dropdown-shown.png', Buffer.from((await cdp('Page.captureScreenshot')).data, 'base64'));
+  await cdp('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape' });
+  await delay(150);
+  assert.equal(await evaluate("document.querySelector('everglow-titlebar').hasAttribute('menu-open')"), false, 'Escape dismisses dropdown');
+  results.push('Dropdown matches top bar UI styling, typography, items, and dismisses on Escape');
 
   const toggle = async () => {
     await evaluate("document.querySelector('everglow-titlebar').shadowRoot.querySelector('[data-action=menu]').click(); true");

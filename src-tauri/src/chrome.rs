@@ -1,6 +1,7 @@
+use std::sync::{atomic::Ordering, Arc};
 use tauri::{
-    menu::{ContextMenu, Submenu},
-    WebviewWindow,
+    menu::{CheckMenuItem, ContextMenu, Submenu},
+    Manager, WebviewWindow,
 };
 use webview2_com::{take_pwstr, WebMessageReceivedEventHandler};
 use windows::core::PWSTR;
@@ -40,7 +41,14 @@ pub fn set_title<R: tauri::Runtime>(window: &WebviewWindow<R>, title: &str) -> t
 pub fn sync_window<R: tauri::Runtime>(window: &WebviewWindow<R>) -> tauri::Result<()> {
     let fullscreen = window.is_fullscreen()?;
     let maximized = window.is_maximized()?;
-    let state = serde_json::json!({ "fullscreen": fullscreen, "maximized": maximized, "title": window.title()? });
+    let title = window.title()?;
+    let adblock = !title.contains("adblock paused");
+    let state = serde_json::json!({
+        "fullscreen": fullscreen,
+        "maximized": maximized,
+        "title": title,
+        "adblock": adblock
+    });
     window.eval(format!(
         "window.dispatchEvent(new CustomEvent('everglow-window-state', {{detail:{state}}}))"
     ))
@@ -90,6 +98,8 @@ pub fn install(
     view: &tauri::webview::PlatformWebview,
     window: WebviewWindow,
     menu: Submenu<tauri::Wry>,
+    blocker: Arc<crate::blocker::Blocker>,
+    adblock: CheckMenuItem<tauri::Wry>,
     verify: bool,
 ) -> windows::core::Result<()> {
     unsafe {
@@ -108,7 +118,8 @@ pub fn install(
                 if args.TryGetWebMessageAsString(&mut message).is_err() {
                     return Ok(());
                 }
-                let result = match take_pwstr(message).as_str() {
+                let msg = take_pwstr(message);
+                let result = match msg.as_str() {
                     "everglow-window:drag" => window.start_dragging(),
                     "everglow-window:minimize" => window.minimize(),
                     "everglow-window:maximize" => window.is_maximized().and_then(|maximized| {
@@ -118,7 +129,26 @@ pub fn install(
                             window.maximize()
                         }
                     }),
-                    "everglow-window:close" => window.close(),
+                    "everglow-window:close" | "everglow-window:menu:close" => window.close(),
+                    "everglow-window:menu:home" => window.navigate(crate::blocker::HOME.parse().expect("home URL")),
+                    "everglow-window:menu:reload" => window.reload(),
+                    "everglow-window:menu:fullscreen" => window.is_fullscreen().and_then(|value| crate::set_fullscreen(&window, !value)),
+                    "everglow-window:menu:adblock" => {
+                        let current = blocker.enabled.load(Ordering::Relaxed);
+                        let enabled = !current;
+                        blocker.enabled.store(enabled, Ordering::Relaxed);
+                        let _ = adblock.set_checked(enabled);
+                        let title = if enabled { "Everglow Desktop — protected" } else { "Everglow Desktop — adblock paused" };
+                        set_title(&window, title).and_then(|_| crate::extension::set_enabled(window.clone(), enabled))
+                    },
+                    "everglow-window:menu:status" => {
+                        set_title(&window, &format!("Everglow Desktop — {} requests blocked · {} popups stopped",
+                            blocker.blocked.load(Ordering::Relaxed), blocker.popups.load(Ordering::Relaxed)))
+                    },
+                    "everglow-window:menu:check_updates" => {
+                        crate::updater::check_for_updates(window.app_handle(), true);
+                        Ok(())
+                    },
                     "everglow-window:menu" => {
                         let result = menu.popup(window.as_ref().window());
                         let _ =

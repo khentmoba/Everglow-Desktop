@@ -13,6 +13,8 @@ public class FullscreenWindow {
   [DllImport("user32.dll")] public static extern bool ClientToScreen(IntPtr window, ref Point point);
   [DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
   [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr window);
+  [DllImport("user32.dll")] public static extern bool BringWindowToTop(IntPtr window);
+  [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr window, IntPtr insertAfter, int x, int y, int cx, int cy, uint flags);
   [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr window, int command);
   [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr window);
   [DllImport("user32.dll")] public static extern bool IsZoomed(IntPtr window);
@@ -37,6 +39,8 @@ if ($WindowState) {
 if ($Pointer) {
   $bounds = New-Object FullscreenWindow+Rect
   if (-not [FullscreenWindow]::GetWindowRect($window, [ref]$bounds)) { throw 'Cannot inspect window bounds' }
+  [FullscreenWindow]::BringWindowToTop($window) | Out-Null
+  [FullscreenWindow]::SetWindowPos($window, [IntPtr]::Zero, 0, 0, 0, 0, 0x0043) | Out-Null
   [FullscreenWindow]::SetForegroundWindow($window) | Out-Null
   $x = [int](($bounds.Left + $bounds.Right) / 2)
   $clientOrigin = New-Object FullscreenWindow+Point
