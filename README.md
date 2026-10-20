@@ -9,6 +9,14 @@ The desktop title bar and Everglow menu hide automatically. Move the pointer to 
 
 Menu: **Everglow â†’ Block ads and trackers** pauses/resumes both blocking layers (and reloads the page). Popups and external top-level redirects remain denied even when ad blocking is paused. **F11** toggles fullscreen; **Refresh Everglow** reloads the site.
 
+## Desktop preferences and recovery
+
+**Everglow > Desktop settings** contains **Always show title bar**, **Remember window layout**, and **Clear cached files**. Preferences apply immediately and survive restarts. The pinned title bar stays over the page and still hides in fullscreen. Cache clearing removes only WebView2's disk cache; cookies, local storage, and sign-in data remain intact.
+
+Window layout is remembered by default, including the normal window bounds behind a maximized window. Saved bounds are fitted into an available monitor's work area if a display was disconnected or resized. Fullscreen is not restored. Turning off remembered layout returns future launches to the default window size.
+
+Opening the shortcut again restores and focuses the existing window. During startup or a connection failure, it brings the recovery window forward instead. A visible local startup screen appears while protection initializes; failed initialization, unsuccessful navigation, HTTP errors, and a 30-second startup timeout offer **Retry** and **Close Everglow**. Retry reconnects after protection is ready, or restarts initialization if it failed. Remote pages still cannot load before protection is installed.
+
 ## Blocking
 - Brave's open-source `adblock-rust` matcher with bundled EasyList and EasyPrivacy.
 - The native lists refresh over HTTPS on every normal launch; failed downloads retain the last usable rules.
@@ -25,7 +33,9 @@ Everglow loads from the live website, not a frozen Flutter bundle. Its existing 
 
 The desktop app itself updates natively since 0.2.0. Version 0.3.0 connects the website entrance and Dashboard to that same updater. It checks about 10 seconds after launch, or on demand through **Everglow > Check for Updates** and the website's **Check for desktop updates** button.
 
-The user approves the download first. Progress appears in the window title. After signature verification, **Restart to update** installs it; **Later** keeps the verified download in memory for this session, without interrupting playback. Check for Updates offers the prepared update again. Closing the app discards that staged download; next launch checks afresh. Duplicate requests cannot start simultaneous downloads. An unsuccessful download never runs an installer.
+Automatic update checks are silent. An available update adds a small badge to the Everglow menu; opening the menu offers **Download update**, inline download progress, and then **Restart to update**. A manual check opens the menu to show its result. Downloading never restarts the app, and no update dialogs interrupt playback. Only the explicit restart action installs the signature-verified download.
+
+The verified download stays in memory until the app closes. Duplicate requests cannot start simultaneous operations. Failed downloads never become installable, and failed installation retains the verified download for another attempt. All update errors appear in the menu with a retry action.
 
 Desktop and website versions are separate. The desktop bridge reports the native package version, not the live website version. Only the top-level production page gets the bridge; player frames, local verification pages and third-party origins cannot use it. Verification mode never checks the real update feed.
 
@@ -76,7 +86,7 @@ The installer is a local unsigned build, not a public Windows-code-signed releas
 ## Verification
 `npm test` launches fake pages in a new isolated WebView2 profile and checks native request blocking, cross-origin iframe cosmetic filtering, a real bundled filemoon.* anti-ad scriptlet, popup/redirect denial, unprivileged remote content, fullscreen, and the native menu's pause/resume behavior.
 
-It also checks hover reveal, animation progress, unchanged page size, reduced motion, keyboard access, and maximized/fullscreen behavior. If another local project uses the fixture port, set `EVERGLOW_VERIFY_PORT` to a free port before running the tests. This override applies only to explicit verification runs.
+It also exercises real mouse dragging, second-launch activation, saved and disabled window layouts across relaunches, settings at normal and minimum window sizes, cache invalidation with preserved cookies/local storage, HTTP-error recovery and retry, synthetic update-menu states, hover reveal, animation progress, unchanged page size, reduced motion, keyboard access, and maximized/fullscreen behavior. If another local project uses the fixture port, set `EVERGLOW_VERIFY_PORT` to a free port before running the tests. This override applies only to explicit verification runs.
 
 `node scripts/verify-live.mjs` checks the unauthenticated live Everglow startup and captures `evidence/live-login.png`. Both runners accept `DESKTOP_EXE` to test the installed release rather than the debug build. Debugging is exposed only with explicit verification flags, with isolated profiles; normal runs expose no debug port.
 
