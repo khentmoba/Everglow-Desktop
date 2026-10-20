@@ -1,7 +1,7 @@
 $ErrorActionPreference = 'Stop'
 $env:DISCORD_WEBHOOK_URL = 'https://discord.invalid/api/webhooks/test/token'
 $env:GITHUB_REPOSITORY = 'khentmoba/Everglow-Desktop'
-$env:GITHUB_REF_NAME = 'v0.3.2'
+$env:GITHUB_REF_NAME = 'v0.4.0'
 
 function Invoke-RestMethod {
     param($Uri, $Method, $ContentType, $Body)
@@ -12,9 +12,9 @@ function Invoke-RestMethod {
 $payload = [Text.Encoding]::UTF8.GetString($request.Body) | ConvertFrom-Json
 if ($request.Uri -ne "$env:DISCORD_WEBHOOK_URL`?wait=true") { throw 'Discord must confirm delivery' }
 if ($request.Method -ne 'Post' -or $request.ContentType -ne 'application/json') { throw 'Expected JSON POST' }
-if ($payload.content -notmatch 'Everglow Desktop v0.3.2 is available!') { throw 'Missing version' }
-if (-not $payload.content.Contains('https://github.com/khentmoba/Everglow-Desktop/releases/tag/v0.3.2')) { throw 'Missing release link' }
-if (-not $payload.content.Contains('https://github.com/khentmoba/Everglow-Desktop/releases/download/v0.3.2/Everglow-Desktop-Setup.exe')) { throw 'Missing version-specific installer link' }
+if ($payload.content -notmatch 'Everglow Desktop v0.4.0 is available!') { throw 'Missing version' }
+if (-not $payload.content.Contains('https://github.com/khentmoba/Everglow-Desktop/releases/tag/v0.4.0')) { throw 'Missing release link' }
+if (-not $payload.content.Contains('https://github.com/khentmoba/Everglow-Desktop/releases/download/v0.4.0/Everglow-Desktop-Setup.exe')) { throw 'Missing version-specific installer link' }
 if ($payload.allowed_mentions.parse.Count -ne 0) { throw 'Mentions must be disabled' }
 
 $env:DISCORD_WEBHOOK_URL += '?thread_id=123'

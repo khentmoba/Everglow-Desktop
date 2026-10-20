@@ -1,6 +1,6 @@
 [package]
 name = "everglow-desktop"
-version = "0.3.2"
+version = "0.4.0"
 edition = "2021"
 description = "Everglow live-site desktop app with native ad and popup blocking"
 
