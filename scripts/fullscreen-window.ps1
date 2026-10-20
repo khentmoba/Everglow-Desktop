@@ -1,4 +1,4 @@
-param([int]$AppProcessId, [switch]$Toggle, [ValidateSet('Top', 'Bar', 'Content', 'Outside')][string]$Pointer, [ValidateSet('Maximize', 'Restore', 'Inspect')][string]$WindowState, [long]$NativeWindowHandle)
+param([int]$AppProcessId, [switch]$Toggle, [switch]$Drag, [ValidateSet('Top', 'Bar', 'Content', 'Outside')][string]$Pointer, [ValidateSet('Maximize', 'Restore', 'Inspect', 'Place')][string]$WindowState, [long]$NativeWindowHandle, [int]$Left = 80, [int]$Top = 80, [int]$Width = 900, [int]$Height = 700)
 $ErrorActionPreference = 'Stop'
 Add-Type @'
 using System;
@@ -12,12 +12,18 @@ public class FullscreenWindow {
   [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr window, out Rect rect);
   [DllImport("user32.dll")] public static extern bool ClientToScreen(IntPtr window, ref Point point);
   [DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
+  [DllImport("user32.dll")] public static extern bool GetCursorPos(out Point point);
+  [DllImport("user32.dll")] public static extern IntPtr WindowFromPoint(Point point);
+  [DllImport("user32.dll")] public static extern IntPtr GetAncestor(IntPtr window, uint flags);
+  [DllImport("user32.dll")] public static extern void mouse_event(uint flags, uint dx, uint dy, uint data, UIntPtr extraInfo);
   [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr window);
   [DllImport("user32.dll")] public static extern bool BringWindowToTop(IntPtr window);
   [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr window, IntPtr insertAfter, int x, int y, int cx, int cy, uint flags);
   [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr window, int command);
   [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr window);
   [DllImport("user32.dll")] public static extern bool IsZoomed(IntPtr window);
+  [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr window);
+  [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
   [DllImport("user32.dll")] public static extern bool SetProcessDpiAwarenessContext(IntPtr context);
   [DllImport("user32.dll")] public static extern IntPtr MonitorFromWindow(IntPtr window, uint flags);
   [DllImport("user32.dll")] public static extern bool GetMonitorInfo(IntPtr monitor, ref MonitorInfo info);
@@ -29,14 +35,23 @@ $window = if ($NativeWindowHandle) { [IntPtr]::new($NativeWindowHandle) } else {
 if ($window -eq [IntPtr]::Zero) { throw 'Everglow window is missing' }
 if ($WindowState) {
   if ($WindowState -eq 'Inspect') {
-    @{ minimized = [FullscreenWindow]::IsIconic($window); maximized = [FullscreenWindow]::IsZoomed($window); handle = $window.ToInt64() } | ConvertTo-Json -Compress
+    $bounds = New-Object FullscreenWindow+Rect
+    if (-not [FullscreenWindow]::GetWindowRect($window, [ref]$bounds)) { throw 'Cannot inspect window bounds' }
+    $cursor = New-Object FullscreenWindow+Point
+    [FullscreenWindow]::GetCursorPos([ref]$cursor) | Out-Null
+    @{ minimized = [FullscreenWindow]::IsIconic($window); maximized = [FullscreenWindow]::IsZoomed($window); visible = [FullscreenWindow]::IsWindowVisible($window); focused = [FullscreenWindow]::GetForegroundWindow() -eq $window; handle = $window.ToInt64(); left = $bounds.Left; top = $bounds.Top; width = $bounds.Right - $bounds.Left; height = $bounds.Bottom - $bounds.Top; cursorX = $cursor.X; cursorY = $cursor.Y; pointerWindow = [FullscreenWindow]::GetAncestor([FullscreenWindow]::WindowFromPoint($cursor), 2).ToInt64() } | ConvertTo-Json -Compress
+    return
+  }
+  if ($WindowState -eq 'Place') {
+    [FullscreenWindow]::ShowWindow($window, 9) | Out-Null
+    if (-not [FullscreenWindow]::SetWindowPos($window, [IntPtr]::Zero, $Left, $Top, $Width, $Height, 0x0040)) { throw 'Cannot place test window' }
     return
   }
   $command = if ($WindowState -eq 'Maximize') { 3 } else { 9 }
   [FullscreenWindow]::ShowWindow($window, $command) | Out-Null
   return
 }
-if ($Pointer) {
+if ($Pointer -or $Drag) {
   $bounds = New-Object FullscreenWindow+Rect
   if (-not [FullscreenWindow]::GetWindowRect($window, [ref]$bounds)) { throw 'Cannot inspect window bounds' }
   [FullscreenWindow]::BringWindowToTop($window) | Out-Null
@@ -51,7 +66,21 @@ if ($Pointer) {
     'Content' { $bounds.Top + 250 }
     'Outside' { $x = $bounds.Left - 10; $bounds.Top + 100 }
   }
+  if ($Drag) { $y = $clientOrigin.Y + 20 }
   if (-not [FullscreenWindow]::SetCursorPos($x, $y)) { throw 'Cannot move test pointer' }
+  if ($Drag) {
+    Start-Sleep -Milliseconds 500
+    [FullscreenWindow]::mouse_event(0x0002, 0, 0, 0, [UIntPtr]::Zero)
+    try {
+      Start-Sleep -Milliseconds 200
+      for ($step = 1; $step -le 10; $step++) {
+        [FullscreenWindow]::SetCursorPos($x - 6 * $step, $y + 4 * $step) | Out-Null
+        Start-Sleep -Milliseconds 30
+      }
+    } finally {
+      [FullscreenWindow]::mouse_event(0x0004, 0, 0, 0, [UIntPtr]::Zero)
+    }
+  }
   return
 }
 if ($Toggle) {

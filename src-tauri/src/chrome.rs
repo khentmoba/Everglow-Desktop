@@ -11,14 +11,16 @@ use windows::Win32::{
 };
 
 pub fn script(verify: bool) -> String {
-    include_str!("../../ui/chrome.js").replace(
-        "__VERIFY_ORIGIN__",
-        &if verify {
-            format!("http://127.0.0.1:{}", crate::blocker::verification_port())
-        } else {
-            String::new()
-        },
-    )
+    include_str!("../../ui/chrome.js")
+        .replace(
+            "__VERIFY_ORIGIN__",
+            &if verify {
+                format!("http://127.0.0.1:{}", crate::blocker::verification_port())
+            } else {
+                String::new()
+            },
+        )
+        .replace("__VERSION__", env!("CARGO_PKG_VERSION"))
 }
 
 fn trusted(source: &str, verify: bool) -> bool {
@@ -43,11 +45,15 @@ pub fn sync_window<R: tauri::Runtime>(window: &WebviewWindow<R>) -> tauri::Resul
     let maximized = window.is_maximized()?;
     let title = window.title()?;
     let adblock = !title.contains("adblock paused");
+    let preferences = window.state::<crate::desktop::DesktopState>().preferences();
+    let update = window.state::<crate::updater::UpdateState>().status();
     let state = serde_json::json!({
         "fullscreen": fullscreen,
         "maximized": maximized,
         "title": title,
-        "adblock": adblock
+        "adblock": adblock,
+        "preferences": preferences,
+        "update": update
     });
     window.eval(format!(
         "window.dispatchEvent(new CustomEvent('everglow-window-state', {{detail:{state}}}))"
@@ -85,7 +91,13 @@ pub fn watch_top_edge(window: &WebviewWindow) {
                     && y >= 0.0
                     && y < height)
             })();
-            let Ok(at_edge) = state else { break };
+            let at_edge = match state {
+                Ok(at_edge) => at_edge,
+                Err(error) => {
+                    eprintln!("Watch desktop top edge: {error}");
+                    break;
+                }
+            };
             if at_edge != was_at_edge {
                 if window.eval(format!("window.dispatchEvent(new CustomEvent('everglow-top-edge', {{detail:{at_edge}}}))")).is_err() { break; }
                 was_at_edge = at_edge;
@@ -121,6 +133,15 @@ pub fn install(
                 let msg = take_pwstr(message);
                 let result = match msg.as_str() {
                     "everglow-window:drag" => window.start_dragging(),
+                    "everglow-window:state" => sync_window(&window),
+                    "everglow-window:settings:titlebar" | "everglow-window:settings:layout" => {
+                        if let Err(error) = window.state::<crate::desktop::DesktopState>().toggle(msg.ends_with(":titlebar")) {
+                            eprintln!("Save desktop settings: {error}");
+                            let _ = window.eval("window.dispatchEvent(new CustomEvent('everglow-settings-error', {detail:'Could not save settings. Please try again.'}))");
+                        }
+                        sync_window(&window)
+                    },
+                    "everglow-window:settings:clear-cache" => crate::desktop::clear_cache(&window),
                     "everglow-window:minimize" => window.minimize(),
                     "everglow-window:maximize" => window.is_maximized().and_then(|maximized| {
                         if maximized {
@@ -146,7 +167,13 @@ pub fn install(
                             blocker.blocked.load(Ordering::Relaxed), blocker.popups.load(Ordering::Relaxed)))
                     },
                     "everglow-window:menu:check_updates" => {
-                        crate::updater::check_for_updates(window.app_handle(), true);
+                        if !verify { crate::updater::check_for_updates(window.app_handle(), true); }
+                        Ok(())
+                    },
+                    "everglow-window:update:download" | "everglow-window:update:install" => {
+                        if !verify {
+                            crate::updater::run(window.app_handle(), if msg.ends_with(":install") { "install" } else { "download" });
+                        }
                         Ok(())
                     },
                     "everglow-window:menu" => {

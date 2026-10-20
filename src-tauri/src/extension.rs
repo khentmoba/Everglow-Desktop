@@ -12,7 +12,6 @@ fn wait_for_protection(
     core: ICoreWebView2,
     extension: ICoreWebView2BrowserExtension,
     window: WebviewWindow,
-    target: String,
 ) -> windows::core::Result<()> {
     unsafe {
         let mut id = PWSTR::null();
@@ -40,9 +39,12 @@ fn wait_for_protection(
                     && take_pwstr(message) == "everglow-desktop-protection-ready"
                 {
                     ready_core.remove_WebMessageReceived(remove_token.get())?;
-                    ready_core.Navigate(&HSTRING::from(&target))?;
-                    if let Err(err) = window.show() {
-                        eprintln!("Show Everglow: {err}");
+                    if let Err(err) = crate::startup::connect(&window) {
+                        eprintln!("Open Everglow: {err}");
+                        crate::startup::fail(
+                            window.app_handle(),
+                            "Could not connect to Everglow. Please retry.",
+                        );
                     }
                 }
                 Ok(())
@@ -59,9 +61,7 @@ pub fn install(
     view: &tauri::webview::PlatformWebview,
     path: std::path::PathBuf,
     window: WebviewWindow,
-    target: &str,
 ) -> windows::core::Result<()> {
-    let target = target.to_owned();
     unsafe {
         let core = view.controller().CoreWebView2()?;
         let profile = core
@@ -74,7 +74,10 @@ pub fn install(
                 move |result, extension| {
                     if result.is_err() || extension.is_none() {
                         eprintln!("Unable to load cosmetic/scriptlet blocker: {result:?}");
-                        window.app_handle().exit(1);
+                        crate::startup::fail(
+                            window.app_handle(),
+                            "Could not load protection. Please retry.",
+                        );
                         return Ok(());
                     }
                     let extension = extension.expect("checked extension");
@@ -88,12 +91,18 @@ pub fn install(
                     extension.Enable(
                         true,
                         &BrowserExtensionEnableCompletedHandler::create(Box::new(move |result| {
-                            result?;
+                            if let Err(error) = result {
+                                eprintln!("Enable protection: {error}");
+                                crate::startup::fail(
+                                    window.app_handle(),
+                                    "Could not enable protection. Please retry.",
+                                );
+                                return Ok(());
+                            }
                             wait_for_protection(
                                 core.clone(),
                                 ready_extension.clone(),
                                 window.clone(),
-                                target.to_owned(),
                             )
                         })),
                     )?;

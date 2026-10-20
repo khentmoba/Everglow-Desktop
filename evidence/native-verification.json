@@ -1,5 +1,6 @@
 {
   "results": [
+    "Bundled startup screen renders while protection initializes",
     "Untrusted local page receives no desktop update bridge",
     "uBO Complete mode: cosmetic ads hidden in top page and cross-origin iframe",
     "Real bundled filemoon.* scriptlet aborted an ad-script property access in cross-origin iframe",
@@ -12,15 +13,22 @@
     "Animated title bar reveals at the top edge, stays usable on hover, and hides over content or outside the window",
     "Smooth reveal and exit, no page resize, reduced-motion fallback, keyboard reveal and Escape verified",
     "Auto-hide works in maximized and restored windows",
+    "Real mouse drag on the title bar moves the restored native window",
+    "Second launch exits without creating another app and restores/focuses the existing window",
     "Custom maximize, restore, and minimize buttons operate the native window",
+    "Desktop settings persist; pinned title bar stays visible; clearing real disk cache preserves cookies and local storage",
+    "Synthetic update states show a menu badge, download progress, and explicit restart action without opening dialogs",
     "Repeated video fullscreen fills the monitor and restores auto-hide on exit",
     "Repeated F11 fullscreen suppresses hover reveal and restores auto-hide on exit",
     "Dropdown matches top bar UI styling, typography, items, and dismisses on Escape",
     "Native menu pauses and restores BOTH blocking layers",
+    "Offline navigation shows recovery; Retry reconnects with protection still active",
+    "HTTP failure shows actionable recovery; Retry reconnects without bypassing protection",
     "Trusted synthetic production-origin page receives version and fixed update action; verification never checks live feed",
-    "Custom close button exits the native app"
+    "Custom close button exits the native app",
+    "Relaunch restores maximized state and normal bounds; disabling layout uses defaults; pinned-titlebar preference survives relaunch"
   ],
   "adHitsWhileProtected": 0,
   "adHitsWhilePaused": 3,
-  "checkedAt": "2026-10-20T10:41:06.308Z"
+  "checkedAt": "2026-10-20T15:28:57.687Z"
 }
