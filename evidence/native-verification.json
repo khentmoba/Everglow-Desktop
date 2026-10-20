@@ -15,11 +15,12 @@
     "Custom maximize, restore, and minimize buttons operate the native window",
     "Repeated video fullscreen fills the monitor and restores auto-hide on exit",
     "Repeated F11 fullscreen suppresses hover reveal and restores auto-hide on exit",
+    "Dropdown matches top bar UI styling, typography, items, and dismisses on Escape",
     "Native menu pauses and restores BOTH blocking layers",
     "Trusted synthetic production-origin page receives version and fixed update action; verification never checks live feed",
     "Custom close button exits the native app"
   ],
   "adHitsWhileProtected": 0,
   "adHitsWhilePaused": 3,
-  "checkedAt": "2026-10-20T02:53:40.755Z"
+  "checkedAt": "2026-10-20T10:41:06.308Z"
 }

@@ -16,7 +16,7 @@ use webview2_com::{
 };
 use windows::core::{w, Interface, BOOL, PWSTR};
 
-fn set_fullscreen(window: &tauri::WebviewWindow, fullscreen: bool) -> tauri::Result<()> {
+pub(crate) fn set_fullscreen(window: &tauri::WebviewWindow, fullscreen: bool) -> tauri::Result<()> {
     window.set_fullscreen(fullscreen)?;
     chrome::sync_window(window)
 }
@@ -160,6 +160,7 @@ fn main() {
             }
         });
         let menu_blocker = Arc::clone(&blocker);
+        let menu_adblock = adblock.clone();
         window.on_menu_event(move |native_window, event| {
             let Some(window) = native_window.app_handle().get_webview_window("main") else { return; };
             let result = match event.id().as_ref() {
@@ -167,7 +168,7 @@ fn main() {
                 "reload" => window.reload(),
                 "fullscreen" => window.is_fullscreen().and_then(|value| set_fullscreen(&window, !value)),
                 "adblock" => {
-                    let enabled = adblock.is_checked().unwrap_or(true);
+                    let enabled = menu_adblock.is_checked().unwrap_or(true);
                     menu_blocker.enabled.store(enabled, Ordering::Relaxed);
                     let title = if enabled { "Everglow Desktop — protected" } else { "Everglow Desktop — adblock paused" };
                     chrome::set_title(&window, title).and_then(|_| extension::set_enabled(window.clone(), enabled))
@@ -185,8 +186,10 @@ fn main() {
         let lists = Arc::clone(&blocker);
         let start_window = window.clone();
         let app_handle = app.handle().clone();
+        let install_blocker = Arc::clone(&blocker);
+        let install_adblock = adblock.clone();
         window.with_webview(move |view| {
-            if let Err(err) = chrome::install(&view, start_window.clone(), submenu, verify) {
+            if let Err(err) = chrome::install(&view, start_window.clone(), submenu, install_blocker, install_adblock, verify) {
                 eprintln!("Unable to install desktop top bar: {err}");
                 app_handle.exit(1);
                 return;
