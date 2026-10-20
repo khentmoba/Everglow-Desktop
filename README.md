@@ -5,6 +5,8 @@ Windows Tauri 2 app loading https://everglow-1c6db.web.app/ in its own window.
 ## Use
 Open **Everglow Desktop** on the desktop or Start menu. Sign in normally; this app has its own persistent browser profile and does not borrow browser cookies.
 
+The desktop title bar and Everglow menu hide automatically. Move the pointer to the top edge to reveal a dark bar with minimize, maximize/restore, close, and a draggable area (double-click to maximize). It slides and fades in over 220 ms without shifting the page, then slides away after a short delay when you leave. Menus keep it open while in use. Reduced-motion preferences replace the slide with a short fade. **Ctrl+Shift+M** reveals and focuses the menu; **Escape** dismisses the bar. Video and F11 fullscreen keep it hidden; leaving fullscreen restores hover reveal.
+
 Menu: **Everglow â†’ Block ads and trackers** pauses/resumes both blocking layers (and reloads the page). Popups and external top-level redirects remain denied even when ad blocking is paused. **F11** toggles fullscreen; **Refresh Everglow** reloads the site.
 
 ## Blocking
@@ -14,7 +16,7 @@ Menu: **Everglow â†’ Block ads and trackers** pauses/resumes both blocking 
 - Native interception covers document/iframe/service-worker/shared-worker request sources.
 - Only our bundled extension is enabled/disabled by the menu, not WebView2's built-in PDF extension.
 - The app waits for the extension's initial filter/script registration before opening Everglow.
-- Remote pages receive no Tauri capabilities. A main-document WebView2 bridge accepts only a fixed update-check message from the exact production Everglow origin. It accepts no installer URLs or other native commands. Navigation remains limited to Everglow and installed extension pages; the extension startup handshake is unchanged.
+- Remote pages receive no Tauri capabilities. The main-document WebView2 bridges accept a fixed update-check message from the production Everglow origin and fixed window-control actions from the exact Everglow website/login origins. Window controls accept no URLs, scripts, paths, or arbitrary commands. Frames cannot send these main-document messages. Navigation remains limited to Everglow and installed extension pages; the extension startup handshake is unchanged.
 
 **This is strong layered ad blocking, not an identical implementation of Brave Shields.** WebView2 is not Brave. Browser-level fingerprint protection, CNAME uncloaking, all Brave-specific heuristics and every streaming site's anti-adblock behavior are not guaranteed.
 
@@ -73,6 +75,8 @@ The installer is a local unsigned build, not a public Windows-code-signed releas
 
 ## Verification
 `npm test` launches fake pages in a new isolated WebView2 profile and checks native request blocking, cross-origin iframe cosmetic filtering, a real bundled filemoon.* anti-ad scriptlet, popup/redirect denial, unprivileged remote content, fullscreen, and the native menu's pause/resume behavior.
+
+It also checks hover reveal, animation progress, unchanged page size, reduced motion, keyboard access, and maximized/fullscreen behavior. If another local project uses the fixture port, set `EVERGLOW_VERIFY_PORT` to a free port before running the tests. This override applies only to explicit verification runs.
 
 `node scripts/verify-live.mjs` checks the unauthenticated live Everglow startup and captures `evidence/live-login.png`. Both runners accept `DESKTOP_EXE` to test the installed release rather than the debug build. Debugging is exposed only with explicit verification flags, with isolated profiles; normal runs expose no debug port.
 

@@ -10,6 +10,12 @@ use std::{
 use url::Url;
 
 pub const HOME: &str = "https://everglow-1c6db.web.app/";
+pub fn verification_port() -> u16 {
+    std::env::var("EVERGLOW_VERIFY_PORT")
+        .ok()
+        .and_then(|port| port.parse().ok())
+        .unwrap_or(18765)
+}
 const EASYLIST: &str = include_str!("../lists/easylist.txt");
 const EASYPRIVACY: &str = include_str!("../lists/easyprivacy.txt");
 const LIST_URLS: [&str; 2] = [
@@ -140,7 +146,7 @@ pub fn allow_navigation(url: &Url, verify: bool) -> bool {
         || (verify
             && url.scheme() == "http"
             && url.host_str() == Some("127.0.0.1")
-            && url.port() == Some(18765))
+            && url.port() == Some(verification_port()))
 }
 
 #[cfg(test)]
