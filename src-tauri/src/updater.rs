@@ -88,7 +88,7 @@ pub fn check_for_updates<R: Runtime>(app: &AppHandle<R>, interactive: bool) {
             } else {
                 original_title.unwrap_or_else(|| "Everglow Desktop - protected".to_owned())
             };
-            if let Err(err) = window.set_title(&title) {
+            if let Err(err) = crate::chrome::set_title(&window, &title) {
                 eprintln!("Update title: {err}");
             }
         }
@@ -137,8 +137,8 @@ async fn prepare_update<R: Runtime>(
                             || format!("{} KB", downloaded / 1024),
                             |n| format!("{n}%"),
                         );
-                        if let Err(err) = window
-                            .set_title(&format!("Everglow Desktop - downloading update {progress}"))
+                        if let Err(err) = crate::chrome::set_title(&window,
+                            &format!("Everglow Desktop - downloading update {progress}"))
                         {
                             eprintln!("Download progress: {err}");
                         }

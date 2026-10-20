@@ -9,12 +9,17 @@
     "Remote page cannot forge the trusted extension startup message",
     "External top-level navigation denied",
     "Remote page cannot invoke privileged Tauri commands",
-    "Repeated video fullscreen fills the monitor, hides the native menu and restores it on exit",
-    "Repeated F11 fullscreen hides the native menu and restores it on exit",
+    "Animated title bar reveals at the top edge, stays usable on hover, and hides over content or outside the window",
+    "Smooth reveal and exit, no page resize, reduced-motion fallback, keyboard reveal and Escape verified",
+    "Auto-hide works in maximized and restored windows",
+    "Custom maximize, restore, and minimize buttons operate the native window",
+    "Repeated video fullscreen fills the monitor and restores auto-hide on exit",
+    "Repeated F11 fullscreen suppresses hover reveal and restores auto-hide on exit",
     "Native menu pauses and restores BOTH blocking layers",
-    "Trusted synthetic production-origin page receives version and fixed update action; verification never checks live feed"
+    "Trusted synthetic production-origin page receives version and fixed update action; verification never checks live feed",
+    "Custom close button exits the native app"
   ],
   "adHitsWhileProtected": 0,
   "adHitsWhilePaused": 3,
-  "checkedAt": "2026-10-19T13:25:27.387Z"
+  "checkedAt": "2026-10-20T02:53:40.755Z"
 }

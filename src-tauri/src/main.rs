@@ -1,5 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 mod blocker;
+mod chrome;
 mod extension;
 mod updater;
 mod website_bridge;
@@ -17,11 +18,7 @@ use windows::core::{w, Interface, BOOL, PWSTR};
 
 fn set_fullscreen(window: &tauri::WebviewWindow, fullscreen: bool) -> tauri::Result<()> {
     window.set_fullscreen(fullscreen)?;
-    if fullscreen {
-        window.hide_menu()
-    } else {
-        window.show_menu()
-    }
+    chrome::sync_window(window)
 }
 
 fn request_kind(context: COREWEBVIEW2_WEB_RESOURCE_CONTEXT) -> &'static str {
@@ -142,8 +139,10 @@ fn main() {
         let mut builder = WebviewWindowBuilder::new(app, "main", WebviewUrl::External("about:blank".parse()?))
             .title("Everglow Desktop — protected")
             .inner_size(1280.0, 850.0).min_inner_size(420.0, 600.0)
-            .menu(menu).visible(false).browser_extensions_enabled(true)
+            .menu(menu).decorations(false).visible(false).browser_extensions_enabled(true)
             .initialization_script(website_bridge::SCRIPT.replace("__VERSION__", env!("CARGO_PKG_VERSION")))
+            .initialization_script(chrome::script(verify))
+            .on_page_load(|window, _| { let _ = chrome::sync_window(&window); })
             .data_directory(data.join(if verify { format!("verification-profile-{}", std::process::id()) } else { "profile".to_owned() }))
             .on_navigation(move |url| allow_navigation(url, verify))
             .on_new_window(move |_, _| {
@@ -152,6 +151,14 @@ fn main() {
             });
         if verify { builder = builder.additional_browser_args("--remote-debugging-port=18766 --remote-debugging-address=127.0.0.1 --host-resolver-rules=\"MAP filemoon.test 127.0.0.1\""); }
         let window = builder.build()?;
+        window.hide_menu()?;
+        chrome::watch_top_edge(&window);
+        let resized_window = window.clone();
+        window.on_window_event(move |event| {
+            if matches!(event, tauri::WindowEvent::Resized(_)) {
+                let _ = chrome::sync_window(&resized_window);
+            }
+        });
         let menu_blocker = Arc::clone(&blocker);
         window.on_menu_event(move |native_window, event| {
             let Some(window) = native_window.app_handle().get_webview_window("main") else { return; };
@@ -163,9 +170,9 @@ fn main() {
                     let enabled = adblock.is_checked().unwrap_or(true);
                     menu_blocker.enabled.store(enabled, Ordering::Relaxed);
                     let title = if enabled { "Everglow Desktop — protected" } else { "Everglow Desktop — adblock paused" };
-                    window.set_title(title).and_then(|_| extension::set_enabled(window.clone(), enabled))
+                    chrome::set_title(&window, title).and_then(|_| extension::set_enabled(window.clone(), enabled))
                 },
-                "status" => window.set_title(&format!("Everglow Desktop — {} requests blocked · {} popups stopped",
+                "status" => chrome::set_title(&window, &format!("Everglow Desktop — {} requests blocked · {} popups stopped",
                     menu_blocker.blocked.load(Ordering::Relaxed), menu_blocker.popups.load(Ordering::Relaxed))),
                 "check_updates" => {
                     updater::check_for_updates(native_window.app_handle(), true);
@@ -179,6 +186,11 @@ fn main() {
         let start_window = window.clone();
         let app_handle = app.handle().clone();
         window.with_webview(move |view| {
+            if let Err(err) = chrome::install(&view, start_window.clone(), submenu, verify) {
+                eprintln!("Unable to install desktop top bar: {err}");
+                app_handle.exit(1);
+                return;
+            }
             if let Err(err) = website_bridge::install(&view, start_window.clone(), verify) {
                 eprintln!("Unable to install desktop update bridge: {err}");
                 app_handle.exit(1);
@@ -191,8 +203,8 @@ fn main() {
                 app_handle.exit(1);
                 return;
             }
-            let target = if verify && !verify_live { "http://127.0.0.1:18765/" } else { HOME };
-            if let Err(err) = extension::install(&view, extension_path, start_window, target) {
+            let target = if verify && !verify_live { format!("http://127.0.0.1:{}/", blocker::verification_port()) } else { HOME.to_owned() };
+            if let Err(err) = extension::install(&view, extension_path, start_window, &target) {
                 eprintln!("Install extension: {err}"); app_handle.exit(1);
             }
         })?;

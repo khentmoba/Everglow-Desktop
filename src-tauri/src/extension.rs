@@ -59,8 +59,9 @@ pub fn install(
     view: &tauri::webview::PlatformWebview,
     path: std::path::PathBuf,
     window: WebviewWindow,
-    target: &'static str,
+    target: &str,
 ) -> windows::core::Result<()> {
+    let target = target.to_owned();
     unsafe {
         let core = view.controller().CoreWebView2()?;
         let profile = core
