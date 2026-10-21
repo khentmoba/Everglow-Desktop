@@ -71,7 +71,7 @@ fn publish<R: Runtime>(
 pub fn check_for_updates<R: Runtime>(app: &AppHandle<R>, interactive: bool) {
     if interactive {
         if let Some(window) = app.get_webview_window("main") {
-            let _ = window.eval("window.dispatchEvent(new Event('everglow-open-menu'))");
+            let _ = window.eval("window.dispatchEvent(new Event('everglow-open-update'))");
         }
     }
     run(app, "check");
