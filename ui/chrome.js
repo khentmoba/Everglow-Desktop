@@ -16,7 +16,7 @@
         .menu { gap:8px; margin-left:4px; }
         .menu span { font-weight:600; }
         [hidden] { display:none !important; }
-        .update-dot { width:6px; height:6px; border-radius:50%; background:#dedee3; }
+        .update-dot { width:7px; height:7px; border-radius:50%; background:#ff5e7e; box-shadow:0 0 8px #f43f5e; }
         .menu[aria-expanded="true"] { background:#2e2e33; }
         .menu svg { transition:transform 140ms ease-out; }
         .menu[aria-expanded="true"] svg { transform:rotate(180deg); }
@@ -118,6 +118,202 @@
           border:0;
         }
         .update-status { margin:4px 8px 8px; max-width:300px; color:#b2b2b8; font-size:12px; line-height:1.5; }
+        .update-dialog {
+          box-sizing: border-box;
+          width: min(440px, calc(100vw - 32px));
+          max-width: 440px;
+          max-height: calc(100vh - 48px);
+          overflow: auto;
+          padding: 28px 24px 24px;
+          border: 1px solid rgba(255, 120, 160, 0.22);
+          border-radius: 22px;
+          background: linear-gradient(165deg, rgba(38, 18, 44, 0.96) 0%, rgba(20, 9, 24, 0.98) 100%);
+          color: #f5f5f7;
+          font: 14px/1.5 'Segoe UI', system-ui, sans-serif;
+          box-shadow: 0 24px 64px rgba(0, 0, 0, 0.8), 0 0 32px rgba(244, 63, 94, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+          color-scheme: dark;
+          text-align: center;
+          position: fixed;
+          inset: 0;
+          margin: auto;
+          outline: none;
+        }
+        .update-dialog[open] {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+        }
+        .update-dialog::backdrop {
+          background: rgba(10, 4, 14, 0.75);
+          backdrop-filter: blur(8px);
+          -webkit-backdrop-filter: blur(8px);
+        }
+        .update-close {
+          position: absolute;
+          top: 14px;
+          right: 14px;
+          width: 28px;
+          height: 28px;
+          border-radius: 50%;
+          border: 1px solid rgba(255, 255, 255, 0.1);
+          background: rgba(255, 255, 255, 0.06);
+          color: #bfaec2;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          cursor: pointer;
+          transition: background-color 120ms ease, color 120ms ease;
+          padding: 0;
+        }
+        .update-close:hover {
+          background: rgba(255, 255, 255, 0.14);
+          color: #fff;
+        }
+        .update-close:focus-visible {
+          outline: 2px solid #ff7597;
+          outline-offset: 2px;
+        }
+        .update-close svg {
+          width: 12px;
+          height: 12px;
+          stroke: currentColor;
+          stroke-width: 2;
+          fill: none;
+        }
+        .update-icon-wrapper {
+          width: 56px;
+          height: 56px;
+          border-radius: 50%;
+          background: linear-gradient(135deg, rgba(244, 63, 94, 0.25) 0%, rgba(236, 72, 153, 0.15) 100%);
+          border: 1.5px solid rgba(244, 63, 94, 0.45);
+          box-shadow: 0 0 24px rgba(244, 63, 94, 0.35);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          margin-bottom: 14px;
+          color: #ff7597;
+        }
+        .update-icon-wrapper svg {
+          width: 26px;
+          height: 26px;
+          stroke: currentColor;
+          stroke-width: 2;
+          fill: none;
+        }
+        .update-chip {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          padding: 4px 12px;
+          border-radius: 9999px;
+          font-size: 11px;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.8px;
+          background: rgba(244, 63, 94, 0.15);
+          border: 1px solid rgba(244, 63, 94, 0.35);
+          color: #ff94b4;
+          margin-bottom: 12px;
+        }
+        .update-heading {
+          margin: 0 0 8px;
+          font-size: 20px;
+          font-weight: 700;
+          letter-spacing: -0.01em;
+          color: #fff0f5;
+        }
+        .update-description {
+          margin: 0 0 8px;
+          font-size: 13.5px;
+          line-height: 1.5;
+          color: #d6c6d9;
+          max-width: 360px;
+        }
+        .update-subtext {
+          margin: 0 0 20px;
+          font-size: 12px;
+          line-height: 1.45;
+          color: #9d8c9f;
+          max-width: 340px;
+        }
+        .update-progress-container {
+          width: 100%;
+          margin-bottom: 20px;
+        }
+        .update-progress-bar {
+          height: 8px;
+          border-radius: 9999px;
+          background: rgba(255, 255, 255, 0.08);
+          overflow: hidden;
+          border: 1px solid rgba(255, 255, 255, 0.06);
+        }
+        .update-progress-fill {
+          height: 100%;
+          border-radius: 9999px;
+          background: linear-gradient(90deg, #ff4d6d, #f43f5e, #ec4899);
+          box-shadow: 0 0 10px rgba(244, 63, 94, 0.6);
+          transition: width 200ms ease;
+        }
+        .update-progress-text {
+          font-size: 12px;
+          color: #ff94b4;
+          margin-top: 8px;
+          font-weight: 600;
+          letter-spacing: 0.2px;
+        }
+        .update-actions {
+          display: flex;
+          gap: 12px;
+          width: 100%;
+          justify-content: center;
+          flex-wrap: wrap;
+        }
+        .update-btn-primary {
+          min-height: 38px;
+          padding: 8px 22px;
+          border: 0;
+          border-radius: 9999px;
+          background: linear-gradient(135deg, #ff5e7e 0%, #f43f5e 50%, #e11d48 100%);
+          color: #ffffff;
+          font: 600 13.5px 'Segoe UI', system-ui, sans-serif;
+          cursor: pointer;
+          box-shadow: 0 4px 16px rgba(244, 63, 94, 0.4);
+          transition: all 140ms ease-out;
+          outline: none;
+        }
+        .update-btn-primary:hover {
+          background: linear-gradient(135deg, #ff7593 0%, #fb7185 50%, #f43f5e 100%);
+          box-shadow: 0 6px 22px rgba(244, 63, 94, 0.6);
+          transform: translateY(-1px);
+        }
+        .update-btn-primary:focus-visible {
+          outline: 2px solid #ff7597;
+          outline-offset: 3px;
+        }
+        .update-btn-secondary {
+          min-height: 38px;
+          padding: 8px 20px;
+          border: 1px solid rgba(255, 255, 255, 0.14);
+          border-radius: 9999px;
+          background: rgba(255, 255, 255, 0.08);
+          color: #e8dbe8;
+          font: 600 13.5px 'Segoe UI', system-ui, sans-serif;
+          cursor: pointer;
+          transition: all 140ms ease-out;
+          outline: none;
+        }
+        .update-btn-secondary:hover {
+          background: rgba(255, 255, 255, 0.15);
+          color: #ffffff;
+          border-color: rgba(255, 255, 255, 0.25);
+        }
+        .update-btn-secondary:focus-visible {
+          outline: 2px solid #dedee3;
+          outline-offset: 3px;
+        }
+        @media (prefers-reduced-motion:reduce) {
+          .update-dialog, .update-btn-primary, .update-progress-fill { transition:none; transform:none; }
+        }
         .settings { box-sizing:border-box; width:min(480px,calc(100vw - 32px)); max-height:calc(100vh - 48px); overflow:auto; padding:24px; border:0; border-radius:12px; background:#18181b; color:#f5f5f7; font:14px/1.5 'Segoe UI',system-ui,sans-serif; box-shadow:0 16px 48px #0008; color-scheme:dark; }
         .settings::backdrop { background:#0008; }
         .settings h2 { margin:0 0 4px; font-size:20px; line-height:1.3; font-weight:600; }
@@ -172,11 +368,149 @@
         <button type="button" class="clear-cache">Clear cached files</button>
         <p class="feedback" role="status" aria-live="polite"></p>
         <footer><button type="button" class="settings-done">Done</button></footer>
+      </dialog>
+      <dialog class="update-dialog" aria-labelledby="update-title" aria-describedby="update-desc">
+        <button type="button" class="update-close" aria-label="Close" title="Close">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4 4 8 8m0-8-8 8"/></svg>
+        </button>
+        <div class="update-icon-wrapper" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M12 3v13m0 0-4-4m4 4 4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
+        </div>
+        <div class="update-chip"><span class="chip-sparkle">✨</span> <span class="chip-text">Update Available</span></div>
+        <h2 id="update-title" class="update-heading">Everglow Desktop</h2>
+        <p id="update-desc" class="update-description">A new version of Everglow Desktop is available.</p>
+        <p class="update-subtext">Keep watching; downloading happens in the background without restarting.</p>
+        <div class="update-progress-container" hidden>
+          <div class="update-progress-bar"><div class="update-progress-fill" style="width:0%"></div></div>
+          <div class="update-progress-text">Downloading… 0%</div>
+        </div>
+        <div class="update-actions">
+          <button type="button" class="update-btn-secondary">Later</button>
+          <button type="button" class="update-btn-primary">Download update</button>
+        </div>
       </dialog>`;
     const bar = root.querySelector('.bar');
     const menuBtn = root.querySelector('.menu');
     const dropdown = root.querySelector('.dropdown');
     const settings = root.querySelector('.settings');
+    const updateDialog = root.querySelector('.update-dialog');
+    const updateTitle = root.querySelector('#update-title');
+    const updateDesc = root.querySelector('#update-desc');
+    const updateSubtext = root.querySelector('.update-subtext');
+    const updateChipText = root.querySelector('.chip-text');
+    const updateProgressContainer = root.querySelector('.update-progress-container');
+    const updateProgressFill = root.querySelector('.update-progress-fill');
+    const updateProgressText = root.querySelector('.update-progress-text');
+    const updateBtnPrimary = root.querySelector('.update-btn-primary');
+    const updateBtnSecondary = root.querySelector('.update-btn-secondary');
+    const updateCloseBtn = root.querySelector('.update-close');
+    const updateIconWrapper = root.querySelector('.update-icon-wrapper');
+    let currentUpdate = null;
+    let dismissedUpdateKey = null;
+
+    const renderUpdatePrompt = update => {
+      if (!update) return;
+      const version = update.version || '';
+      const phase = update.phase;
+      const progress = update.progress ?? null;
+
+      updateProgressContainer.hidden = true;
+      updateBtnSecondary.hidden = false;
+      updateBtnPrimary.hidden = false;
+      updateBtnPrimary.disabled = false;
+
+      if (phase === 'available') {
+        updateChipText.textContent = 'Update Available';
+        updateIconWrapper.innerHTML = `<svg viewBox="0 0 24 24"><path d="M12 3v13m0 0-4-4m4 4 4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>`;
+        updateTitle.textContent = version ? `Everglow Desktop ${version}` : 'New Update Available';
+        updateDesc.textContent = version ? `Everglow Desktop ${version} is available. Download when you’re ready.` : 'A new update is available for Everglow Desktop.';
+        updateSubtext.textContent = 'Keep watching; downloading happens in the background without restarting.';
+        updateBtnPrimary.textContent = 'Download update';
+        updateBtnSecondary.textContent = 'Later';
+      } else if (phase === 'downloading') {
+        updateChipText.textContent = 'Downloading';
+        updateIconWrapper.innerHTML = `<svg viewBox="0 0 24 24"><path d="M12 3v13m0 0-4-4m4 4 4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>`;
+        updateTitle.textContent = version ? `Downloading ${version}…` : 'Downloading update…';
+        updateDesc.textContent = update.message || 'Downloading update… Keep watching; nothing will restart.';
+        updateSubtext.textContent = 'You can safely keep browsing or watching movies.';
+        updateProgressContainer.hidden = false;
+        const percent = progress !== null ? Math.min(100, Math.max(0, progress)) : 0;
+        updateProgressFill.style.width = `${percent}%`;
+        updateProgressText.textContent = progress !== null ? `Downloading: ${percent}%` : 'Downloading…';
+        updateBtnPrimary.hidden = true;
+        updateBtnSecondary.textContent = 'Keep watching in background';
+      } else if (phase === 'ready') {
+        updateChipText.textContent = 'Update Ready';
+        updateIconWrapper.innerHTML = `<svg viewBox="0 0 24 24"><path d="m5 13 4 4L19 7"/></svg>`;
+        updateTitle.textContent = version ? `Everglow Desktop ${version}` : 'Update Ready to Install';
+        updateDesc.textContent = version ? `Everglow Desktop ${version} is downloaded and verified. Restart to install it?` : 'Desktop update is downloaded and verified. Restart to install it?';
+        updateSubtext.textContent = 'Choose Later to keep watching. Use Check for Updates when you are ready.';
+        updateBtnPrimary.textContent = 'Restart to update';
+        updateBtnSecondary.textContent = 'Later';
+      } else if (phase === 'checking') {
+        updateChipText.textContent = 'Checking';
+        updateIconWrapper.innerHTML = `<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>`;
+        updateTitle.textContent = 'Checking for updates…';
+        updateDesc.textContent = 'Looking for the latest version of Everglow Desktop…';
+        updateSubtext.textContent = 'Checking GitHub releases and signatures…';
+        updateBtnPrimary.hidden = true;
+        updateBtnSecondary.textContent = 'Cancel';
+      } else if (phase === 'current') {
+        updateChipText.textContent = 'Up to Date';
+        updateIconWrapper.innerHTML = `<svg viewBox="0 0 24 24"><path d="m12 2 2.8 6.2 6.7.6-5 4.6 1.4 6.6-5.9-3.4-5.9 3.4 1.4-6.6-5-4.6 6.7-.6z"/></svg>`;
+        updateTitle.textContent = 'You’re on the latest version';
+        updateDesc.textContent = 'You’re enjoying the newest features and protections in Everglow Desktop.';
+        updateSubtext.textContent = 'Automatic checks will let you know when the next update arrives.';
+        updateBtnSecondary.hidden = true;
+        updateBtnPrimary.textContent = 'Done';
+      } else if (phase === 'error') {
+        updateChipText.textContent = 'Notice';
+        updateIconWrapper.innerHTML = `<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v4m0 4h.01"/></svg>`;
+        updateTitle.textContent = 'Could not check for updates';
+        updateDesc.textContent = update.message || 'Could not complete the update. Your current app is unchanged.';
+        updateSubtext.textContent = 'Please check your internet connection and try again later.';
+        updateBtnSecondary.hidden = true;
+        updateBtnPrimary.textContent = 'Done';
+      }
+    };
+
+    const openUpdateDialog = () => {
+      if (host.hasAttribute('fullscreen')) return;
+      if (!updateDialog.open) {
+        if (settings.open) settings.close();
+        closeMenu();
+        updateDialog.showModal();
+      }
+      renderUpdatePrompt(currentUpdate);
+    };
+
+    const closeUpdateDialog = (userDismissed = false) => {
+      if (updateDialog.open) {
+        updateDialog.close();
+      }
+      if (userDismissed && currentUpdate) {
+        dismissedUpdateKey = `${currentUpdate.phase}:${currentUpdate.version || ''}`;
+      }
+    };
+
+    updateBtnPrimary.addEventListener('click', () => {
+      if (!currentUpdate) { closeUpdateDialog(); return; }
+      const phase = currentUpdate.phase;
+      if (phase === 'available') {
+        send('update:download');
+        renderUpdatePrompt({ ...currentUpdate, phase: 'downloading', progress: 0 });
+      } else if (phase === 'ready') {
+        send('update:install');
+        renderUpdatePrompt({ ...currentUpdate, phase: 'installing' });
+      } else {
+        closeUpdateDialog();
+      }
+    });
+
+    updateBtnSecondary.addEventListener('click', () => closeUpdateDialog(true));
+    updateCloseBtn.addEventListener('click', () => closeUpdateDialog(true));
+    updateDialog.addEventListener('cancel', () => closeUpdateDialog(true));
+    window.addEventListener('everglow-open-update', openUpdateDialog);
     let pinned = false;
     let updateAction = 'check';
     let menuOpen = false;
@@ -272,6 +606,8 @@
       }
       if (menuAction) {
         if (menuAction === 'check_updates') {
+          closeMenu();
+          openUpdateDialog();
           if (updateAction === 'check') send('menu:check_updates');
           else send(`update:${updateAction}`);
           return;
@@ -322,7 +658,11 @@
     window.addEventListener('everglow-menu-closed', () => { closeMenu(); });
     window.addEventListener('everglow-window-state', event => {
       host.toggleAttribute('fullscreen', event.detail.fullscreen);
-      if (event.detail.fullscreen) { if (settings.open) settings.close(); hide(); }
+      if (event.detail.fullscreen) {
+        if (settings.open) settings.close();
+        if (updateDialog.open) updateDialog.close();
+        hide();
+      }
       if (event.detail.preferences) {
         pinned = event.detail.preferences.alwaysShowTitlebar;
         root.querySelector('[name="titlebar"]').checked = pinned;
@@ -331,6 +671,7 @@
       }
       if (event.detail.update) {
         const update = event.detail.update;
+        currentUpdate = update;
         updateAction = update.action || 'check';
         const button = root.querySelector('[data-menu="check_updates"]');
         button.querySelector('.label').textContent = updateAction === 'install' ? 'Restart to update' : updateAction === 'download' ? 'Download update' : 'Check for Updates…';
@@ -340,6 +681,15 @@
         const status = root.querySelector('.update-status');
         status.textContent = update.message;
         status.hidden = !update.message;
+
+        if (updateDialog.open) {
+          renderUpdatePrompt(update);
+        } else if (!host.hasAttribute('fullscreen') && !menuOpen) {
+          const key = `${update.phase}:${update.version || ''}`;
+          if (['available', 'ready'].includes(update.phase) && dismissedUpdateKey !== key) {
+            openUpdateDialog();
+          }
+        }
       }
       const maximize = root.querySelector('[data-action="maximize"]');
       const label = event.detail.maximized ? 'Restore' : 'Maximize';
@@ -358,6 +708,13 @@
 
     document.addEventListener('keydown', event => {
       if (settings.open) return;
+      if (updateDialog.open) {
+        if (event.key === 'Escape') {
+          event.preventDefault();
+          closeUpdateDialog(true);
+        }
+        return;
+      }
       if (event.ctrlKey && event.shiftKey && event.code === 'KeyM') {
         event.preventDefault();
         previousFocus = document.activeElement;
