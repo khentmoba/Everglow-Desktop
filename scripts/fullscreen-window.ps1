@@ -4,6 +4,24 @@ Add-Type @'
 using System;
 using System.Runtime.InteropServices;
 public class FullscreenWindow {
+  public delegate bool EnumWindowCallback(IntPtr window, IntPtr parameter);
+  [DllImport("user32.dll")] public static extern bool EnumWindows(EnumWindowCallback callback, IntPtr parameter);
+  [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr window, out uint processId);
+  public static IntPtr FindAppWindow(uint processId) {
+    IntPtr result = IntPtr.Zero;
+    EnumWindows((window, parameter) => {
+      uint owner;
+      GetWindowThreadProcessId(window, out owner);
+      Rect bounds;
+      if (owner == processId && IsWindowVisible(window) && GetWindowRect(window, out bounds)
+          && bounds.Right - bounds.Left > 100 && bounds.Bottom - bounds.Top > 100) {
+        result = window;
+        return false;
+      }
+      return true;
+    }, IntPtr.Zero);
+    return result;
+  }
   [StructLayout(LayoutKind.Sequential)] public struct Rect { public int Left, Top, Right, Bottom; }
   [StructLayout(LayoutKind.Sequential)] public struct Point { public int X, Y; }
   [StructLayout(LayoutKind.Sequential)] public struct MonitorInfo { public int Size; public Rect Monitor, Work; public uint Flags; }
@@ -31,7 +49,7 @@ public class FullscreenWindow {
 }
 '@
 [FullscreenWindow]::SetProcessDpiAwarenessContext([IntPtr]::new(-4)) | Out-Null
-$window = if ($NativeWindowHandle) { [IntPtr]::new($NativeWindowHandle) } else { (Get-Process -Id $AppProcessId).MainWindowHandle }
+$window = if ($NativeWindowHandle) { [IntPtr]::new($NativeWindowHandle) } else { [FullscreenWindow]::FindAppWindow($AppProcessId) }
 if ($window -eq [IntPtr]::Zero) { throw 'Everglow window is missing' }
 if ($WindowState) {
   if ($WindowState -eq 'Inspect') {
