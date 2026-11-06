@@ -22,8 +22,29 @@ pub(crate) const VERIFY_BROWSER_ARGS: &str = "--remote-debugging-port=18766 --re
 pub(crate) fn set_fullscreen(window: &tauri::WebviewWindow, fullscreen: bool) -> tauri::Result<()> {
     if fullscreen {
         desktop::save_layout(window);
+        // A maximized window keeps its work-area client size in fullscreen,
+        // leaving a taskbar-sized strip behind. Restore it first, then put the
+        // maximized state back when fullscreen ends.
+        if !window.is_fullscreen()? {
+            let maximized = window.is_maximized()?;
+            window
+                .state::<desktop::DesktopState>()
+                .fullscreen_was_maximized
+                .store(maximized, Ordering::Relaxed);
+            if maximized {
+                window.unmaximize()?;
+            }
+        }
     }
     window.set_fullscreen(fullscreen)?;
+    if !fullscreen
+        && window
+            .state::<desktop::DesktopState>()
+            .fullscreen_was_maximized
+            .swap(false, Ordering::Relaxed)
+    {
+        window.maximize()?;
+    }
     chrome::sync_window(window)
 }
 
