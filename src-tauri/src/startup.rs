@@ -14,6 +14,7 @@ use windows::core::{Interface, BOOL, PWSTR};
 struct Status {
     phase: &'static str,
     message: String,
+    details: String,
 }
 
 pub struct StartupState {
@@ -30,6 +31,7 @@ impl StartupState {
             status: Mutex::new(Status {
                 phase: "loading",
                 message: "Preparing your protected window…".into(),
+                details: String::new(),
             }),
             protected: false.into(),
             opened: false.into(),
@@ -58,6 +60,7 @@ pub fn fail(app: &AppHandle, message: &str) {
     *app.state::<StartupState>().status.lock().unwrap() = Status {
         phase: "error",
         message: message.into(),
+        details: crate::diagnostics::last_error().unwrap_or_default(),
     };
     sync(app);
     if let Some(window) = app.get_webview_window("startup") {
@@ -74,6 +77,7 @@ pub fn connect(window: &WebviewWindow) -> tauri::Result<()> {
     *state.status.lock().unwrap() = Status {
         phase: "loading",
         message: "Connecting to Everglow…".into(),
+        details: String::new(),
     };
     sync(window.app_handle());
     window.navigate(state.target.parse().expect("fixed Everglow URL"))?;
@@ -86,7 +90,7 @@ fn retry(app: &AppHandle) {
     if state.protected.load(Ordering::Acquire) {
         if let Some(window) = app.get_webview_window("main") {
             if let Err(error) = connect(&window) {
-                eprintln!("Retry Everglow: {error}");
+                log_error!("Retry Everglow: {error}");
                 fail(
                     app,
                     "Could not reconnect to Everglow. Check your connection and try again.",
@@ -111,6 +115,7 @@ fn watch_timeout(app: &AppHandle) {
         if state.generation.load(Ordering::Acquire) == generation
             && state.status.lock().unwrap().phase == "loading"
         {
+            log_error!("Everglow did not finish loading within 30 seconds");
             fail(&app, "Everglow is taking longer than expected. Check your internet connection, then try again.");
         }
     });
@@ -178,7 +183,7 @@ pub fn create(app: &AppHandle, profile: &std::path::Path, verify: bool) -> tauri
             )
         })();
         if let Err(error) = result {
-            eprintln!("Startup controls: {error}");
+            log_error!("Startup controls: {error}");
         }
     })?;
     watch_timeout(window.app_handle());
@@ -215,15 +220,16 @@ pub fn install(
                 let mut error = COREWEBVIEW2_WEB_ERROR_STATUS_UNKNOWN;
                 args.WebErrorStatus(&mut error)?;
                 if error != COREWEBVIEW2_WEB_ERROR_STATUS_OPERATION_CANCELED {
+                    log_error!("Everglow did not load: HTTP {status}, WebView2 error {}", error.0);
                     fail(window.app_handle(), "Could not load Everglow. Check your internet connection, then try again.");
                 }
                 return Ok(());
             }
             let state = window.state::<StartupState>();
-            *state.status.lock().unwrap() = Status { phase: "ready", message: String::new() };
+            *state.status.lock().unwrap() = Status { phase: "ready", message: String::new(), details: String::new() };
             state.generation.fetch_add(1, Ordering::AcqRel);
             if !state.opened.swap(true, Ordering::AcqRel) {
-                if let Err(error) = crate::desktop::restore_layout(&window) { eprintln!("Restore layout: {error}"); }
+                if let Err(error) = crate::desktop::restore_layout(&window) { log_error!("Restore layout: {error}"); }
             }
             let _ = window.show();
             if let Some(startup) = window.app_handle().get_webview_window("startup") { let _ = startup.hide(); }

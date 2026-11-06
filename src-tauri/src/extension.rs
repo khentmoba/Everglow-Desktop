@@ -40,7 +40,7 @@ fn wait_for_protection(
                 {
                     ready_core.remove_WebMessageReceived(remove_token.get())?;
                     if let Err(err) = crate::startup::connect(&window) {
-                        eprintln!("Open Everglow: {err}");
+                        log_error!("Open Everglow: {err}");
                         crate::startup::fail(
                             window.app_handle(),
                             "Could not connect to Everglow. Please retry.",
@@ -73,7 +73,7 @@ pub fn install(
             &ProfileAddBrowserExtensionCompletedHandler::create(Box::new(
                 move |result, extension| {
                     if result.is_err() || extension.is_none() {
-                        eprintln!("Unable to load cosmetic/scriptlet blocker: {result:?}");
+                        log_error!("Unable to load cosmetic/scriptlet blocker: {result:?}");
                         crate::startup::fail(
                             window.app_handle(),
                             "Could not load protection. Please retry.",
@@ -92,7 +92,7 @@ pub fn install(
                         true,
                         &BrowserExtensionEnableCompletedHandler::create(Box::new(move |result| {
                             if let Err(error) = result {
-                                eprintln!("Enable protection: {error}");
+                                log_error!("Enable protection: {error}");
                                 crate::startup::fail(
                                     window.app_handle(),
                                     "Could not enable protection. Please retry.",
@@ -143,7 +143,7 @@ pub fn set_enabled(window: WebviewWindow, enabled: bool) -> tauri::Result<()> {
                                     move |result| {
                                         result?;
                                         if let Err(err) = window.reload() {
-                                            eprintln!("Reload after adblock toggle: {err}");
+                                            log_error!("Reload after adblock toggle: {err}");
                                         }
                                         Ok(())
                                     },
@@ -157,7 +157,7 @@ pub fn set_enabled(window: WebviewWindow, enabled: bool) -> tauri::Result<()> {
             Ok(())
         })();
         if let Err(err) = result {
-            eprintln!("Toggle extension blocker: {err}");
+            log_error!("Toggle extension blocker: {err}");
         }
     })
 }

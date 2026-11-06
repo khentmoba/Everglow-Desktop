@@ -7,7 +7,7 @@ Open **Everglow Desktop** on the desktop or Start menu. Sign in normally; this a
 
 The desktop title bar and Everglow menu hide automatically. Move the pointer to the top edge to reveal a dark bar with minimize, maximize/restore, close, and a draggable area (double-click to maximize). It slides and fades in over 220 ms without shifting the page, then slides away after a short delay when you leave. Menus keep it open while in use. Reduced-motion preferences replace the slide with a short fade. **Ctrl+Shift+M** reveals and focuses the menu; **Escape** dismisses the bar. Video and F11 fullscreen keep it hidden; leaving fullscreen restores hover reveal.
 
-Menu: **Everglow â†’ Block ads and trackers** pauses/resumes both blocking layers (and reloads the page). Popups and external top-level redirects remain denied even when ad blocking is paused. **F11** toggles fullscreen; **Refresh Everglow** reloads the site.
+Menu: **Everglow â†’ Block ads and trackers** pauses/resumes both blocking layers (and reloads the page). Popups and external top-level redirects remain denied even when ad blocking is paused. A link you click on the Everglow page opens in your default browser. **F11** toggles fullscreen; **Refresh Everglow** reloads the site.
 
 ## Desktop preferences and recovery
 
@@ -15,7 +15,7 @@ Menu: **Everglow â†’ Block ads and trackers** pauses/resumes both blocking 
 
 Window layout is remembered by default, including the normal window bounds behind a maximized window. Saved bounds are fitted into an available monitor's work area if a display was disconnected or resized. Fullscreen is not restored. Turning off remembered layout returns future launches to the default window size.
 
-Opening the shortcut again restores and focuses the existing window. During startup or a connection failure, it brings the recovery window forward instead. A visible local startup screen appears while protection initializes; failed initialization, unsuccessful navigation, HTTP errors, and a 30-second startup timeout offer **Retry** and **Close Everglow**. Retry reconnects after protection is ready, or restarts initialization if it failed. Remote pages still cannot load before protection is installed.
+Opening the shortcut again restores and focuses the existing window. During startup or a connection failure, it brings the recovery window forward instead. A visible local startup screen appears while protection initializes; failed initialization, unsuccessful navigation, HTTP errors, and a 30-second startup timeout offer **Retry** and **Close Everglow**. Retry reconnects after protection is ready, or restarts initialization if it failed. Remote pages still cannot load before protection is installed. Failures are also appended to `%LOCALAPPDATA%\com.everglow.desktop\desktop.log`, and the recovery screen shows the latest one.
 
 ## Blocking
 - Brave's open-source `adblock-rust` matcher with bundled EasyList and EasyPrivacy.

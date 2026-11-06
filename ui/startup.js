@@ -4,6 +4,9 @@ window.addEventListener('everglow-startup-state', event => {
   document.querySelector('main').setAttribute('aria-busy', String(!failed));
   document.getElementById('heading').textContent = failed ? 'Couldn’t open Everglow' : 'Opening Everglow…';
   document.getElementById('message').textContent = event.detail.message;
+  const details = document.getElementById('details');
+  details.textContent = event.detail.details ? `Technical details: ${event.detail.details}` : '';
+  details.hidden = !event.detail.details;
   document.querySelector('.actions').hidden = !failed;
   document.getElementById('retry').disabled = false;
 });

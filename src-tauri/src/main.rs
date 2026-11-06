@@ -1,8 +1,12 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+#[macro_use]
+mod diagnostics;
+mod actions;
 mod blocker;
 mod chrome;
 mod desktop;
 mod extension;
+mod popups;
 mod startup;
 mod updater;
 mod website_bridge;
@@ -36,6 +40,10 @@ pub(crate) fn set_fullscreen(window: &tauri::WebviewWindow, fullscreen: bool) ->
             }
         }
     }
+    window
+        .state::<desktop::DesktopState>()
+        .fullscreen
+        .store(fullscreen, Ordering::Relaxed);
     window.set_fullscreen(fullscreen)?;
     if !fullscreen
         && window
@@ -124,7 +132,7 @@ fn install_blocking(
                     let mut fullscreen = BOOL::default();
                     sender.ContainsFullScreenElement(&mut fullscreen)?;
                     if let Err(err) = set_fullscreen(&fullscreen_window, fullscreen.as_bool()) {
-                        eprintln!("Fullscreen: {err}");
+                        log_error!("Fullscreen: {err}");
                     }
                 }
                 Ok(())
@@ -163,6 +171,7 @@ fn main() {
     .setup(move |app| {
         let data = app.path().app_local_data_dir()?;
         std::fs::create_dir_all(&data)?;
+        diagnostics::init(data.join("desktop.log"));
         let settings_dir = if verify { std::env::var_os("EVERGLOW_VERIFY_DATA_DIR").map(std::path::PathBuf::from).unwrap_or_else(|| data.clone()) } else { data.clone() };
         std::fs::create_dir_all(&settings_dir)?;
         app.manage(desktop::DesktopState::load(settings_dir.join("desktop-settings.json")));
@@ -172,7 +181,9 @@ fn main() {
         startup::create(app.handle(), &profile, verify)?;
         let cache = data.join("adblock-lists.txt");
         let blocker = Blocker::new(&cache, verify);
+        app.manage(Arc::clone(&blocker));
         let adblock = CheckMenuItem::with_id(app, "adblock", "Block ads and trackers", true, true, Some("Ctrl+Shift+B"))?;
+        let controls = actions::Controls { blocker: Arc::clone(&blocker), adblock: adblock.clone() };
         let home = MenuItem::with_id(app, "home", "Home", true, Some("Alt+Home"))?;
         let reload = MenuItem::with_id(app, "reload", "Refresh Everglow", true, Some("Ctrl+R"))?;
         let fullscreen = MenuItem::with_id(app, "fullscreen", "Fullscreen", true, Some("F11"))?;
@@ -184,7 +195,6 @@ fn main() {
         let quit = PredefinedMenuItem::quit(app, Some("Close Everglow"))?;
         let submenu = Submenu::with_items(app, "Everglow", true, &[&home, &reload, &fullscreen, &separator, &adblock, &status, &check_updates, &settings, &separator2, &quit])?;
         let menu = Menu::with_items(app, &[&submenu])?;
-        let popup_blocker = Arc::clone(&blocker);
         let extension_path = if cfg!(debug_assertions) {
             std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../vendor/ubol")
         } else { app.path().resource_dir()?.join("ubol") };
@@ -196,16 +206,12 @@ fn main() {
             .initialization_script(chrome::script(verify))
             .on_page_load(|window, _| { let _ = chrome::sync_window(&window); })
             .data_directory(profile)
-            .on_navigation(move |url| allow_navigation(url, verify))
-            .on_new_window(move |_, _| {
-                popup_blocker.popups.fetch_add(1, Ordering::Relaxed);
-                tauri::webview::NewWindowResponse::Deny
-            });
+            .on_navigation(move |url| allow_navigation(url, verify));
         if verify { builder = builder.additional_browser_args(VERIFY_BROWSER_ARGS); }
         let window = match builder.build() {
             Ok(window) => window,
             Err(error) => {
-                eprintln!("Create Everglow window: {error}");
+                log_error!("Create Everglow window: {error}");
                 startup::fail(app.handle(), "Could not create the Everglow window. Update Microsoft Edge WebView2 Runtime, then retry.");
                 return Ok(());
             }
@@ -213,70 +219,62 @@ fn main() {
         window.hide_menu()?;
         chrome::watch_top_edge(&window);
         let resized_window = window.clone();
+        // Resize fires continuously while dragging; the page only tracks the maximized flag, so sync on change.
+        let maximized_seen = std::sync::atomic::AtomicBool::new(false);
         window.on_window_event(move |event| {
             if matches!(event, tauri::WindowEvent::CloseRequested { .. }) {
                 desktop::save_layout(&resized_window);
                 resized_window.app_handle().exit(0);
             }
             if matches!(event, tauri::WindowEvent::Resized(_)) {
-                let _ = chrome::sync_window(&resized_window);
+                if let Ok(maximized) = resized_window.is_maximized() {
+                    if maximized_seen.swap(maximized, Ordering::Relaxed) != maximized {
+                        let _ = chrome::sync_window(&resized_window);
+                    }
+                }
             }
         });
-        let menu_blocker = Arc::clone(&blocker);
-        let menu_adblock = adblock.clone();
+        let menu_controls = controls.clone();
         window.on_menu_event(move |native_window, event| {
             let Some(window) = native_window.app_handle().get_webview_window("main") else { return; };
-            let result = match event.id().as_ref() {
-                "home" => window.navigate(HOME.parse().expect("home URL")),
-                "reload" => window.reload(),
-                "fullscreen" => window.is_fullscreen().and_then(|value| set_fullscreen(&window, !value)),
-                "adblock" => {
-                    let enabled = menu_adblock.is_checked().unwrap_or(true);
-                    menu_blocker.enabled.store(enabled, Ordering::Relaxed);
-                    let title = if enabled { "Everglow Desktop — protected" } else { "Everglow Desktop — adblock paused" };
-                    chrome::set_title(&window, title).and_then(|_| extension::set_enabled(window.clone(), enabled))
-                },
-                "status" => chrome::set_title(&window, &format!("Everglow Desktop — {} requests blocked · {} popups stopped",
-                    menu_blocker.blocked.load(Ordering::Relaxed), menu_blocker.popups.load(Ordering::Relaxed))),
-                "check_updates" => {
-                    if !verify { updater::check_for_updates(native_window.app_handle(), true); }
-                    Ok(())
-                },
-                "settings" => window.eval("window.dispatchEvent(new Event('everglow-open-settings'))"),
-                _ => Ok(()),
-            };
-            if let Err(err) = result { eprintln!("Desktop menu: {err}"); }
+            let Some(action) = actions::Action::from_menu_id(event.id().as_ref()) else { return; };
+            if let Err(err) = actions::run(&window, &menu_controls, action, verify) { log_error!("Desktop menu: {err}"); }
         });
         let lists = Arc::clone(&blocker);
         let start_window = window.clone();
         let app_handle = app.handle().clone();
-        let install_blocker = Arc::clone(&blocker);
-        let install_adblock = adblock.clone();
+        let install_controls = controls.clone();
+        let popup_blocker = Arc::clone(&blocker);
         window.with_webview(move |view| {
-            if let Err(err) = chrome::install(&view, start_window.clone(), submenu, install_blocker, install_adblock, verify) {
-                eprintln!("Unable to install desktop top bar: {err}");
+            if let Err(err) = chrome::install(&view, start_window.clone(), submenu, install_controls, verify) {
+                log_error!("Unable to install desktop top bar: {err}");
                 startup::fail(&app_handle, "Could not prepare the desktop controls. Please retry.");
                 return;
             }
             if let Err(err) = website_bridge::install(&view, start_window.clone(), verify) {
-                eprintln!("Unable to install desktop update bridge: {err}");
+                log_error!("Unable to install desktop update bridge: {err}");
                 startup::fail(&app_handle, "Could not prepare desktop updates. Please retry.");
                 return;
             }
             let result = install_blocking(&view, blocker, start_window.clone());
             // Never load remote content before native protection is installed.
             if let Err(err) = result {
-                eprintln!("Unable to enable WebView2 adblock: {err}. Update Microsoft Edge WebView2 Runtime.");
+                log_error!("Unable to enable WebView2 adblock: {err}. Update Microsoft Edge WebView2 Runtime.");
                 startup::fail(&app_handle, "Could not enable protection. Update Microsoft Edge WebView2 Runtime, then retry.");
                 return;
             }
+            if let Err(err) = popups::install(&view, popup_blocker) {
+                log_error!("Unable to route new windows: {err}");
+                startup::fail(&app_handle, "Could not enable protection. Please retry.");
+                return;
+            }
             if let Err(err) = startup::install(&view, start_window.clone(), verify) {
-                eprintln!("Startup recovery: {err}");
+                log_error!("Startup recovery: {err}");
                 startup::fail(&app_handle, "Could not prepare startup recovery. Please retry.");
                 return;
             }
             if let Err(err) = extension::install(&view, extension_path, start_window) {
-                eprintln!("Install extension: {err}");
+                log_error!("Install extension: {err}");
                 startup::fail(&app_handle, "Could not load protection. Please retry.");
             }
         })?;

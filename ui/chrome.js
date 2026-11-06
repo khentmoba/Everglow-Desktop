@@ -731,6 +731,14 @@
       }
     });
     document.addEventListener('fullscreenchange', () => { if (document.fullscreenElement) hide(); });
+    // A real click on a link to another site goes to the default browser; the app never leaves Everglow.
+    document.addEventListener('click', event => {
+      if (!event.isTrusted || event.button !== 0 || event.defaultPrevented) return;
+      const link = event.composedPath().find(node => node instanceof HTMLAnchorElement);
+      if (!link || !/^https?:$/.test(link.protocol) || link.origin === location.origin) return;
+      event.preventDefault();
+      send(`external:${link.href}`);
+    }, true);
     hide();
     dropdown.inert = true;
     document.documentElement.append(host);
