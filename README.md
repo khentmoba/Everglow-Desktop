@@ -7,7 +7,7 @@ Open **Everglow Desktop** on the desktop or Start menu. Sign in normally; this a
 
 The desktop title bar and Everglow menu hide automatically. Move the pointer to the top edge to reveal a dark bar with minimize, maximize/restore, close, and a draggable area (double-click to maximize). It slides and fades in over 220 ms without shifting the page, then slides away after a short delay when you leave. Menus keep it open while in use. Reduced-motion preferences replace the slide with a short fade. **Ctrl+Shift+M** reveals and focuses the menu; **Escape** dismisses the bar. Video and F11 fullscreen keep it hidden; leaving fullscreen restores hover reveal.
 
-Menu: **Everglow â†’ Block ads and trackers** pauses/resumes both blocking layers (and reloads the page). Popups and external top-level redirects remain denied even when ad blocking is paused. A link you click on the Everglow page opens in your default browser. **F11** toggles fullscreen; **Refresh Everglow** reloads the site.
+Menu: **Everglow â†’ Block ads and trackers** pauses/resumes both blocking layers (and reloads the page). Popups and external top-level redirects remain denied even when ad blocking is paused. A left-click on a link to another site opens in your default browser. **F11** toggles fullscreen; **Refresh Everglow** reloads the site.
 
 ## Desktop preferences and recovery
 

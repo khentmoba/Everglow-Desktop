@@ -40,11 +40,11 @@ pub(crate) fn set_fullscreen(window: &tauri::WebviewWindow, fullscreen: bool) ->
             }
         }
     }
+    window.set_fullscreen(fullscreen)?;
     window
         .state::<desktop::DesktopState>()
         .fullscreen
         .store(fullscreen, Ordering::Relaxed);
-    window.set_fullscreen(fullscreen)?;
     if !fullscreen
         && window
             .state::<desktop::DesktopState>()

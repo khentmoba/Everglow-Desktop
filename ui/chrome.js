@@ -738,7 +738,7 @@
       if (!link || !/^https?:$/.test(link.protocol) || link.origin === location.origin) return;
       event.preventDefault();
       send(`external:${link.href}`);
-    }, true);
+    });
     hide();
     dropdown.inert = true;
     document.documentElement.append(host);

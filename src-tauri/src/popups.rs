@@ -41,7 +41,9 @@ pub fn install(
     Ok(())
 }
 
-/// `source` is the trusted Everglow page that sent the click.
+/// Sent by the page script for each trusted link click. Any script on the trusted page can send this
+/// message, as it can send the window-control messages; the click check lives in the page script, and
+/// the native side enforces only the URL scheme and adblock rules. `source` is the trusted page.
 pub fn open_external(uri: &str, source: &str, blocker: &Blocker, verify: bool) {
     let Some(url) = web_url(uri) else { return };
     if blocker.blocks(url.as_str(), source, "popup") {
@@ -58,23 +60,27 @@ pub fn open_external(uri: &str, source: &str, blocker: &Blocker, verify: bool) {
         }
         return;
     }
-    let file = HSTRING::from(url.as_str());
-    let launched = unsafe {
-        ShellExecuteW(
-            None,
-            w!("open"),
-            &file,
-            PCWSTR::null(),
-            PCWSTR::null(),
-            SW_SHOWNORMAL,
-        )
-    };
-    if launched.0 as isize <= 32 {
-        log_error!(
-            "Open external link: ShellExecute returned {}",
-            launched.0 as isize
-        );
-    }
+    let uri = url.to_string();
+    // ShellExecute can wait on a browser prompt, so the UI thread does not run it.
+    std::thread::spawn(move || {
+        let file = HSTRING::from(uri.as_str());
+        let launched = unsafe {
+            ShellExecuteW(
+                None,
+                w!("open"),
+                &file,
+                PCWSTR::null(),
+                PCWSTR::null(),
+                SW_SHOWNORMAL,
+            )
+        };
+        if launched.0 as isize <= 32 {
+            log_error!(
+                "Open external link: ShellExecute returned {}",
+                launched.0 as isize
+            );
+        }
+    });
 }
 
 #[cfg(test)]

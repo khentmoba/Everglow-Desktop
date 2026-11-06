@@ -46,7 +46,9 @@ fn read_pointer(hwnd: HWND, was_at_edge: bool, suppressed: bool) -> Option<Readi
             return Some(idle);
         }
         let mut cursor = POINT::default();
-        GetCursorPos(&mut cursor).ok()?;
+        if GetCursorPos(&mut cursor).is_err() {
+            return Some(idle);
+        }
         if GetAncestor(WindowFromPoint(cursor), GA_ROOT) != hwnd {
             return Some(idle);
         }

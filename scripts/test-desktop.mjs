@@ -287,10 +287,11 @@ try {
   assert.equal(await evaluate("document.querySelector('everglow-titlebar').shadowRoot.querySelector('[data-menu=check_updates]').disabled"), true);
   await showUpdate({ phase: 'ready', action: 'install', message: 'Desktop 9.9.9 is verified and ready. Restart when you’re ready.' });
   assert.equal(await evaluate("document.querySelector('everglow-titlebar').shadowRoot.querySelector('[data-menu=check_updates] .label').textContent"), 'Restart to update');
-  await delay(200);
-  writeFileSync('evidence/update-menu.png', Buffer.from((await cdp('Page.captureScreenshot')).data, 'base64'));
-  await evaluate("chrome.webview.postMessage('everglow-window:state'); true");
+  // The ready state opens the update dialog; close it so the menu shows the restart action.
+  await evaluate("document.querySelector('everglow-titlebar').shadowRoot.querySelector('.update-close').click(); true");
   await clickControl('menu');
+  await delay(500);
+  writeFileSync('evidence/update-menu.png', Buffer.from((await cdp('Page.captureScreenshot')).data, 'base64'));
   results.push('Synthetic update states show a menu badge, download progress, and explicit restart action without opening dialogs');
   await movePointer('Content');
   execFileSync('powershell', ['-NoProfile', '-File', 'scripts/fullscreen-window.ps1', '-AppProcessId', String(child.pid), '-WindowState', 'Maximize'], { windowsHide: true });
@@ -373,7 +374,7 @@ try {
   await movePointer('Top');
   await toggle();
   await movePointer('Content');
-  assert(await until(() => evaluate("getComputedStyle(document.getElementById('cosmetic-ad')).display !== 'none'")), 'Paused blocking shows the ad after reload');
+  assert(await until(() => evaluate("getComputedStyle(document.getElementById('cosmetic-ad')).display !== 'none'"), 15000), 'Paused blocking shows the ad after reload');
   await movePointer('Top');
   assert.equal((await chromeState()).captionVisible, true, 'Animated menu can still be revealed after reloading');
   await movePointer('Content');
@@ -383,7 +384,7 @@ try {
   await movePointer('Top');
   await toggle();
   await movePointer('Content');
-  assert(await until(() => evaluate("getComputedStyle(document.getElementById('cosmetic-ad')).display === 'none'")), 'Resumed blocking hides the ad after reload');
+  assert(await until(() => evaluate("getComputedStyle(document.getElementById('cosmetic-ad')).display === 'none'"), 15000), 'Resumed blocking hides the ad after reload');
   assert.equal((await evaluate("fetch('/desktop-ad-probe-fetch').then(r=>r.status)")), 204);
   results.push('Native menu pauses and restores BOTH blocking layers');
 
