@@ -40,6 +40,7 @@ pub struct DesktopState {
     path: PathBuf,
     preferences: Mutex<Preferences>,
     pub cache_busy: std::sync::atomic::AtomicBool,
+    pub fullscreen_was_maximized: std::sync::atomic::AtomicBool,
 }
 
 impl DesktopState {
@@ -52,6 +53,7 @@ impl DesktopState {
             path,
             preferences: Mutex::new(preferences),
             cache_busy: false.into(),
+            fullscreen_was_maximized: false.into(),
         }
     }
 

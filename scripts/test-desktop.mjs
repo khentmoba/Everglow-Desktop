@@ -286,6 +286,20 @@ try {
   await clickControl('menu');
   results.push('Synthetic update states show a menu badge, download progress, and explicit restart action without opening dialogs');
   await movePointer('Content');
+  execFileSync('powershell', ['-NoProfile', '-File', 'scripts/fullscreen-window.ps1', '-AppProcessId', String(child.pid), '-WindowState', 'Maximize'], { windowsHide: true });
+  await delay(400);
+  assert.equal(windowState().maximized, true, 'Fullscreen regression starts from a maximized window');
+  await evaluate("document.getElementById('video').requestFullscreen().then(()=>true)", { userGesture: true });
+  await delay(500);
+  assert.equal(await evaluate('!!document.fullscreenElement'), true);
+  assert.deepEqual(nativeWindow(), { menuVisible: false, fillsMonitor: true }, 'Fullscreen from a maximized window must fill the monitor, not just the work area');
+  await evaluate('document.exitFullscreen().then(()=>true)');
+  await delay(500);
+  assert.equal(windowState().maximized, true, 'Leaving fullscreen restores the maximized window');
+  assert.equal(nativeWindow().menuVisible, false, 'Leaving fullscreen keeps the native menu hidden');
+  execFileSync('powershell', ['-NoProfile', '-File', 'scripts/fullscreen-window.ps1', '-AppProcessId', String(child.pid), '-WindowState', 'Restore'], { windowsHide: true });
+  await delay(400);
+  results.push('Fullscreen from a maximized window fills the monitor and restores the maximized window on exit');
   for (let n = 0; n < 2; n++) {
     await evaluate("document.getElementById('video').requestFullscreen().then(()=>true)", { userGesture: true });
     await delay(400);
