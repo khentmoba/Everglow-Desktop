@@ -129,7 +129,7 @@ impl Blocker {
                 Ok(())
             })();
             if let Err(err) = result {
-                eprintln!("Adblock refresh: {err}");
+                log_error!("Adblock refresh: {err}");
             }
         });
     }

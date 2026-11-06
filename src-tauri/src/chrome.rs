@@ -1,14 +1,77 @@
+use crate::{
+    actions::{self, Action, Controls},
+    popups,
+};
 use std::sync::{atomic::Ordering, Arc};
 use tauri::{
-    menu::{CheckMenuItem, ContextMenu, Submenu},
+    menu::{ContextMenu, Submenu},
     Manager, WebviewWindow,
 };
 use webview2_com::{take_pwstr, WebMessageReceivedEventHandler};
-use windows::core::PWSTR;
-use windows::Win32::{
-    Foundation::POINT,
-    UI::WindowsAndMessaging::{GetAncestor, WindowFromPoint, GA_ROOT},
+use windows::{
+    core::PWSTR,
+    Win32::{
+        Foundation::{HWND, POINT, RECT},
+        Graphics::Gdi::ClientToScreen,
+        UI::{
+            HiDpi::GetDpiForWindow,
+            WindowsAndMessaging::{
+                GetAncestor, GetClientRect, GetCursorPos, IsIconic, IsWindow, WindowFromPoint,
+                GA_ROOT,
+            },
+        },
+    },
 };
+
+const NEAR_POLL: std::time::Duration = std::time::Duration::from_millis(80);
+const FAR_POLL: std::time::Duration = std::time::Duration::from_millis(200);
+
+struct Reading {
+    at_edge: bool,
+    over_window: bool,
+}
+
+/// Plain Win32 calls: Tauri's window getters each round-trip to the UI thread.
+/// Returns None once the window is gone.
+fn read_pointer(hwnd: HWND, was_at_edge: bool, suppressed: bool) -> Option<Reading> {
+    let idle = Reading {
+        at_edge: false,
+        over_window: false,
+    };
+    unsafe {
+        if !IsWindow(Some(hwnd)).as_bool() {
+            return None;
+        }
+        if suppressed || IsIconic(hwnd).as_bool() {
+            return Some(idle);
+        }
+        let mut cursor = POINT::default();
+        if GetCursorPos(&mut cursor).is_err() {
+            return Some(idle);
+        }
+        if GetAncestor(WindowFromPoint(cursor), GA_ROOT) != hwnd {
+            return Some(idle);
+        }
+        let mut origin = POINT::default();
+        let mut client = RECT::default();
+        if !ClientToScreen(hwnd, &mut origin).as_bool() || GetClientRect(hwnd, &mut client).is_err()
+        {
+            return Some(Reading {
+                at_edge: false,
+                over_window: true,
+            });
+        }
+        let scale = f64::from(GetDpiForWindow(hwnd)) / 96.0;
+        let x = f64::from(cursor.x - origin.x);
+        let y = f64::from(cursor.y - origin.y);
+        let width = f64::from(client.right - client.left);
+        let height = if was_at_edge { 44.0 } else { 8.0 } * scale;
+        Some(Reading {
+            at_edge: x >= 0.0 && x < width && y >= 0.0 && y < height,
+            over_window: true,
+        })
+    }
+}
 
 pub fn script(verify: bool) -> String {
     include_str!("../../ui/chrome.js")
@@ -23,7 +86,7 @@ pub fn script(verify: bool) -> String {
         .replace("__VERSION__", env!("CARGO_PKG_VERSION"))
 }
 
-fn trusted(source: &str, verify: bool) -> bool {
+pub(crate) fn trusted(source: &str, verify: bool) -> bool {
     let Ok(url) = url::Url::parse(source) else {
         return false;
     };
@@ -44,7 +107,10 @@ pub fn sync_window<R: tauri::Runtime>(window: &WebviewWindow<R>) -> tauri::Resul
     let fullscreen = window.is_fullscreen()?;
     let maximized = window.is_maximized()?;
     let title = window.title()?;
-    let adblock = !title.contains("adblock paused");
+    let adblock = window
+        .state::<Arc<crate::blocker::Blocker>>()
+        .enabled
+        .load(Ordering::Relaxed);
     let preferences = window.state::<crate::desktop::DesktopState>().preferences();
     let update = window.state::<crate::updater::UpdateState>().status();
     let state = serde_json::json!({
@@ -61,47 +127,29 @@ pub fn sync_window<R: tauri::Runtime>(window: &WebviewWindow<R>) -> tauri::Resul
 }
 
 pub fn watch_top_edge(window: &WebviewWindow) {
+    let Ok(handle) = window.hwnd() else { return };
+    let raw = handle.0 as isize;
     let window = window.clone();
     std::thread::spawn(move || {
         let mut was_at_edge = false;
         loop {
-            std::thread::sleep(std::time::Duration::from_millis(80));
-            let state = (|| -> tauri::Result<bool> {
-                if window.is_minimized()? || window.is_fullscreen()? {
-                    return Ok(false);
-                }
-                let origin = window.inner_position()?;
-                let cursor = window.cursor_position()?;
-                let width = window.inner_size()?.width;
-                let x = cursor.x - f64::from(origin.x);
-                let y = cursor.y - f64::from(origin.y);
-                let height = if was_at_edge { 44.0 } else { 8.0 } * window.scale_factor()?;
-                let under_pointer = unsafe {
-                    GetAncestor(
-                        WindowFromPoint(POINT {
-                            x: cursor.x as i32,
-                            y: cursor.y as i32,
-                        }),
-                        GA_ROOT,
-                    )
-                };
-                Ok(under_pointer == window.hwnd()?
-                    && x >= 0.0
-                    && x < f64::from(width)
-                    && y >= 0.0
-                    && y < height)
-            })();
-            let at_edge = match state {
-                Ok(at_edge) => at_edge,
-                Err(error) => {
-                    eprintln!("Watch desktop top edge: {error}");
-                    break;
-                }
+            let fullscreen = window
+                .state::<crate::desktop::DesktopState>()
+                .fullscreen
+                .load(Ordering::Relaxed);
+            let Some(reading) = read_pointer(HWND(raw as *mut _), was_at_edge, fullscreen) else {
+                break;
             };
-            if at_edge != was_at_edge {
+            if reading.at_edge != was_at_edge {
+                let at_edge = reading.at_edge;
                 if window.eval(format!("window.dispatchEvent(new CustomEvent('everglow-top-edge', {{detail:{at_edge}}}))")).is_err() { break; }
                 was_at_edge = at_edge;
             }
+            std::thread::sleep(if reading.over_window {
+                NEAR_POLL
+            } else {
+                FAR_POLL
+            });
         }
     });
 }
@@ -110,8 +158,7 @@ pub fn install(
     view: &tauri::webview::PlatformWebview,
     window: WebviewWindow,
     menu: Submenu<tauri::Wry>,
-    blocker: Arc<crate::blocker::Blocker>,
-    adblock: CheckMenuItem<tauri::Wry>,
+    controls: Controls,
     verify: bool,
 ) -> windows::core::Result<()> {
     unsafe {
@@ -123,7 +170,8 @@ pub fn install(
                 let Some(args) = args else { return Ok(()) };
                 let mut source = PWSTR::null();
                 args.Source(&mut source)?;
-                if !trusted(&take_pwstr(source), verify) {
+                let source = take_pwstr(source);
+                if !trusted(&source, verify) {
                     return Ok(());
                 }
                 let mut message = PWSTR::null();
@@ -136,7 +184,7 @@ pub fn install(
                     "everglow-window:state" => sync_window(&window),
                     "everglow-window:settings:titlebar" | "everglow-window:settings:layout" => {
                         if let Err(error) = window.state::<crate::desktop::DesktopState>().toggle(msg.ends_with(":titlebar")) {
-                            eprintln!("Save desktop settings: {error}");
+                            log_error!("Save desktop settings: {error}");
                             let _ = window.eval("window.dispatchEvent(new CustomEvent('everglow-settings-error', {detail:'Could not save settings. Please try again.'}))");
                         }
                         sync_window(&window)
@@ -151,25 +199,6 @@ pub fn install(
                         }
                     }),
                     "everglow-window:close" | "everglow-window:menu:close" => window.close(),
-                    "everglow-window:menu:home" => window.navigate(crate::blocker::HOME.parse().expect("home URL")),
-                    "everglow-window:menu:reload" => window.reload(),
-                    "everglow-window:menu:fullscreen" => window.is_fullscreen().and_then(|value| crate::set_fullscreen(&window, !value)),
-                    "everglow-window:menu:adblock" => {
-                        let current = blocker.enabled.load(Ordering::Relaxed);
-                        let enabled = !current;
-                        blocker.enabled.store(enabled, Ordering::Relaxed);
-                        let _ = adblock.set_checked(enabled);
-                        let title = if enabled { "Everglow Desktop — protected" } else { "Everglow Desktop — adblock paused" };
-                        set_title(&window, title).and_then(|_| crate::extension::set_enabled(window.clone(), enabled))
-                    },
-                    "everglow-window:menu:status" => {
-                        set_title(&window, &format!("Everglow Desktop — {} requests blocked · {} popups stopped",
-                            blocker.blocked.load(Ordering::Relaxed), blocker.popups.load(Ordering::Relaxed)))
-                    },
-                    "everglow-window:menu:check_updates" => {
-                        if !verify { crate::updater::check_for_updates(window.app_handle(), true); }
-                        Ok(())
-                    },
                     "everglow-window:update:download" | "everglow-window:update:install" => {
                         if !verify {
                             crate::updater::run(window.app_handle(), if msg.ends_with(":install") { "install" } else { "download" });
@@ -182,10 +211,22 @@ pub fn install(
                             window.eval("window.dispatchEvent(new Event('everglow-menu-closed'))");
                         result
                     }
-                    _ => return Ok(()),
+                    other if other.starts_with("everglow-window:external:") => {
+                        popups::open_external(
+                            &other["everglow-window:external:".len()..],
+                            &source,
+                            &controls.blocker,
+                            verify,
+                        );
+                        Ok(())
+                    }
+                    other => match other.strip_prefix("everglow-window:menu:").and_then(Action::from_menu_id) {
+                        Some(action) => actions::run(&window, &controls, action, verify),
+                        None => return Ok(()),
+                    },
                 };
                 if let Err(error) = result {
-                    eprintln!("Desktop top bar: {error}");
+                    log_error!("Desktop top bar: {error}");
                 }
                 let _ = sync_window(&window);
                 Ok(())

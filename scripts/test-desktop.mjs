@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { spawn, execFileSync } from 'node:child_process';
-import { readFileSync, writeFileSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 
@@ -43,6 +43,14 @@ async function evaluate(expression, extra = {}) {
   return value.result.value;
 }
 const delay = ms => new Promise(r => setTimeout(r, ms));
+// Polls a condition instead of sleeping a fixed time; a thrown error (page mid-reload) counts as not yet.
+async function until(check, timeoutMs = 5000) {
+  for (let elapsed = 0; elapsed <= timeoutMs; elapsed += 100) {
+    try { if (await check()) return true; } catch {}
+    await delay(100);
+  }
+  return false;
+}
 async function connectTarget(target) {
   ws?.close();
   ws = new WebSocket(target.webSocketDebuggerUrl);
@@ -89,8 +97,7 @@ try {
   assert.equal(await evaluate('typeof window.__everglowCheckForUpdates'), 'undefined');
   assert.equal(await evaluate('typeof window.__everglowDesktopVersion'), 'undefined');
   results.push('Untrusted local page receives no desktop update bridge');
-  await delay(1600);
-  assert.equal(await evaluate("getComputedStyle(document.getElementById('cosmetic-ad')).display"), 'none', 'Complete mode must hide generic ad elements');
+  assert(await until(() => evaluate("getComputedStyle(document.getElementById('cosmetic-ad')).display === 'none'")), 'Complete mode must hide generic ad elements');
   await evaluate("document.querySelector('iframe').contentWindow.postMessage('inspect','*')");
   await delay(400);
   const frameProof = await evaluate('window.frameProof');
@@ -280,10 +287,11 @@ try {
   assert.equal(await evaluate("document.querySelector('everglow-titlebar').shadowRoot.querySelector('[data-menu=check_updates]').disabled"), true);
   await showUpdate({ phase: 'ready', action: 'install', message: 'Desktop 9.9.9 is verified and ready. Restart when you’re ready.' });
   assert.equal(await evaluate("document.querySelector('everglow-titlebar').shadowRoot.querySelector('[data-menu=check_updates] .label').textContent"), 'Restart to update');
-  await delay(200);
-  writeFileSync('evidence/update-menu.png', Buffer.from((await cdp('Page.captureScreenshot')).data, 'base64'));
-  await evaluate("chrome.webview.postMessage('everglow-window:state'); true");
+  // The ready state opens the update dialog; close it so the menu shows the restart action.
+  await evaluate("document.querySelector('everglow-titlebar').shadowRoot.querySelector('.update-close').click(); true");
   await clickControl('menu');
+  await delay(500);
+  writeFileSync('evidence/update-menu.png', Buffer.from((await cdp('Page.captureScreenshot')).data, 'base64'));
   results.push('Synthetic update states show a menu badge, download progress, and explicit restart action without opening dialogs');
   await movePointer('Content');
   execFileSync('powershell', ['-NoProfile', '-File', 'scripts/fullscreen-window.ps1', '-AppProcessId', String(child.pid), '-WindowState', 'Maximize'], { windowsHide: true });
@@ -366,7 +374,7 @@ try {
   await movePointer('Top');
   await toggle();
   await movePointer('Content');
-  await delay(1800);
+  assert(await until(() => evaluate("getComputedStyle(document.getElementById('cosmetic-ad')).display !== 'none'"), 15000), 'Paused blocking shows the ad after reload');
   await movePointer('Top');
   assert.equal((await chromeState()).captionVisible, true, 'Animated menu can still be revealed after reloading');
   await movePointer('Content');
@@ -376,12 +384,7 @@ try {
   await movePointer('Top');
   await toggle();
   await movePointer('Content');
-  await delay(2000);
-  for (let n=0; n<60; n++) {
-    if (await evaluate("!!document.getElementById('cosmetic-ad')")) break;
-    await delay(200);
-  }
-  assert.equal(await evaluate("getComputedStyle(document.getElementById('cosmetic-ad')).display"), 'none');
+  assert(await until(() => evaluate("getComputedStyle(document.getElementById('cosmetic-ad')).display === 'none'"), 15000), 'Resumed blocking hides the ad after reload');
   assert.equal((await evaluate("fetch('/desktop-ad-probe-fetch').then(r=>r.status)")), 204);
   results.push('Native menu pauses and restores BOTH blocking layers');
 
@@ -436,6 +439,15 @@ try {
   assert.equal(await evaluate("window.__everglowCheckForUpdates(); 'requested'"), 'requested');
   assert.equal(await evaluate("Object.getOwnPropertyDescriptor(window, '__everglowCheckForUpdates').writable"), false);
   results.push('Trusted synthetic production-origin page receives version and fixed update action; verification never checks live feed');
+  // Real mouse input on a link from the production page: the page hands it to the default browser, which verification records instead.
+  await evaluate("const a = document.createElement('a'); a.id = 'external-link'; a.href = 'https://external-link-test.invalid/article'; a.target = '_blank'; a.textContent = 'External link'; a.style.cssText = 'position:fixed;left:100px;top:200px;width:200px;height:40px;display:block;background:#fff;color:#000;z-index:5'; document.body.append(a); true");
+  const link = await evaluate("(() => { const r = document.getElementById('external-link').getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; })()");
+  await cdp('Input.dispatchMouseEvent', { type: 'mousePressed', x: link.x, y: link.y, button: 'left', clickCount: 1 });
+  await cdp('Input.dispatchMouseEvent', { type: 'mouseReleased', x: link.x, y: link.y, button: 'left', clickCount: 1 });
+  await delay(400);
+  const externalLinks = existsSync(resolve(settingsDir, 'external-links.txt')) ? readFileSync(resolve(settingsDir, 'external-links.txt'), 'utf8') : '';
+  assert.equal(externalLinks, 'https://external-link-test.invalid/article\n', 'Only the user-clicked link leaves the window');
+  results.push('Clicked link on the production page opens in the default browser; script popups stay denied');
 
   execFileSync('powershell', ['-NoProfile', '-File', 'scripts/fullscreen-window.ps1', '-AppProcessId', String(child.pid), '-WindowState', 'Place'], { windowsHide: true });
   const savedBounds = windowState();

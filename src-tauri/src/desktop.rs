@@ -41,6 +41,7 @@ pub struct DesktopState {
     preferences: Mutex<Preferences>,
     pub cache_busy: std::sync::atomic::AtomicBool,
     pub fullscreen_was_maximized: std::sync::atomic::AtomicBool,
+    pub fullscreen: std::sync::atomic::AtomicBool,
 }
 
 impl DesktopState {
@@ -54,6 +55,7 @@ impl DesktopState {
             preferences: Mutex::new(preferences),
             cache_busy: false.into(),
             fullscreen_was_maximized: false.into(),
+            fullscreen: false.into(),
         }
     }
 
@@ -134,7 +136,7 @@ pub fn save_layout<R: tauri::Runtime>(window: &WebviewWindow<R>) {
         state.write(&preferences)
     })();
     if let Err(error) = result {
-        eprintln!("Save window layout: {error}");
+        log_error!("Save window layout: {error}");
     }
 }
 
@@ -229,7 +231,7 @@ pub fn clear_cache(window: &WebviewWindow) -> tauri::Result<()> {
             )
         })();
         if let Err(error) = result {
-            eprintln!("Clear cache: {error}");
+            log_error!("Clear cache: {error}");
             callback_window
                 .state::<DesktopState>()
                 .cache_busy

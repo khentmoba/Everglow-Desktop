@@ -92,7 +92,7 @@ pub fn run<R: Runtime>(app: &AppHandle<R>, action: &'static str) {
             _ => check(&app).await,
         };
         if let Err(error) = result {
-            eprintln!("Desktop update: {error}");
+            log_error!("Desktop update: {error}");
             publish(&app, "error", None, None, "Could not complete the update. Your current app is unchanged. Try again when you’re ready.".into());
         }
     });
