@@ -18,6 +18,7 @@
     "Custom maximize, restore, and minimize buttons operate the native window",
     "Desktop settings persist; pinned title bar stays visible; clearing real disk cache preserves cookies and local storage",
     "Synthetic update states show a menu badge, download progress, and explicit restart action without opening dialogs",
+    "Fullscreen from a maximized window fills the monitor and restores the maximized window on exit",
     "Repeated video fullscreen fills the monitor and restores auto-hide on exit",
     "Repeated F11 fullscreen suppresses hover reveal and restores auto-hide on exit",
     "Dropdown matches top bar UI styling, typography, items, and dismisses on Escape",
@@ -25,10 +26,11 @@
     "Offline navigation shows recovery; Retry reconnects with protection still active",
     "HTTP failure shows actionable recovery; Retry reconnects without bypassing protection",
     "Trusted synthetic production-origin page receives version and fixed update action; verification never checks live feed",
+    "Clicked link on the production page opens in the default browser; script popups stay denied",
     "Custom close button exits the native app",
     "Relaunch restores maximized state and normal bounds; disabling layout uses defaults; pinned-titlebar preference survives relaunch"
   ],
   "adHitsWhileProtected": 0,
   "adHitsWhilePaused": 3,
-  "checkedAt": "2026-10-20T15:28:57.687Z"
+  "checkedAt": "2026-11-06T23:31:20.705Z"
 }
