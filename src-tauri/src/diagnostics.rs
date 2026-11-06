@@ -35,7 +35,11 @@ pub fn record(message: &str) {
     let seconds = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_or(0, |elapsed| elapsed.as_secs());
-    log.last = Some(message.chars().take(MAX_DETAIL_CHARS).collect());
+    let single_line: String = message
+        .chars()
+        .map(|c| if c == '\r' || c == '\n' { ' ' } else { c })
+        .collect();
+    log.last = Some(single_line.chars().take(MAX_DETAIL_CHARS).collect());
     if fs::metadata(&log.path).is_ok_and(|meta| meta.len() > MAX_LOG_BYTES) {
         let _ = fs::rename(&log.path, log.path.with_extension("log.1"));
     }
@@ -43,7 +47,7 @@ pub fn record(message: &str) {
         .create(true)
         .append(true)
         .open(&log.path)
-        .and_then(|mut file| writeln!(file, "{seconds} {message}"));
+        .and_then(|mut file| writeln!(file, "{seconds} {single_line}"));
 }
 
 pub fn last_error() -> Option<String> {
