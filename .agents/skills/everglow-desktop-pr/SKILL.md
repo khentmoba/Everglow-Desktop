@@ -87,3 +87,13 @@ Small diff sketch or state diagram making the change obvious:
    gh pr checks
    ```
 4. Return the PR URL and check status. Merging and releases require separate authorization.
+
+## 6. Releasing a version
+
+Only when a release is explicitly requested:
+
+1. In the release PR, bump all five version sources (`package.json`, `package-lock.json`, `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`).
+2. In the same PR, add a `## [X.Y.Z] - YYYY-MM-DD` section to `CHANGELOG.md`. Write one plain-English `- ` bullet per user-facing change since the last tag. Never paste commit subjects; the contract test rejects `Merge ...`, `feat(...)`, `fix(...)` and similar bullets.
+3. Preview the notes with `node scripts/release-notes.mjs`. The release contract test fails if the section is missing.
+4. After the PR merges, tag the merge commit `vX.Y.Z` and push the tag. `desktop-release.yml` builds, publishes the GitHub release with the changelog section as its notes, and posts to Discord. Do not post to Discord separately.
+5. Verify the release assets and the Discord post. If the post is wrong, edit that message instead of sending a second one.

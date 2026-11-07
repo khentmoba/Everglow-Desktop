@@ -37,6 +37,13 @@ jobs:
       - name: Check version and release tag
         run: node --test scripts/release-contract.test.mjs
 
+      # Fails before building when CHANGELOG.md has no usable section for this tag.
+      - name: Extract release notes
+        shell: pwsh
+        run: |
+          node scripts/release-notes.mjs $env:GITHUB_REF_NAME --out (Join-Path $env:RUNNER_TEMP 'release-notes.md')
+          if ($LASTEXITCODE -ne 0) { throw 'CHANGELOG.md needs a section for this release' }
+
       - name: Check Discord notification
         shell: pwsh
         run: ./scripts/notify-discord.test.ps1
@@ -76,7 +83,7 @@ jobs:
           if (-not ($assets.assets.name | Where-Object { $_ -like '*_x64-setup.exe.sig' })) {
             throw 'Missing Windows updater signature'
           }
-          gh release edit $env:GITHUB_REF_NAME --draft=false --latest
+          gh release edit $env:GITHUB_REF_NAME --draft=false --latest --notes-file (Join-Path $env:RUNNER_TEMP 'release-notes.md')
           if ($LASTEXITCODE -ne 0) { throw 'Release publication failed' }
 
       - name: Notify Discord
@@ -86,8 +93,9 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           $installer = Join-Path $env:RUNNER_TEMP 'Everglow-Desktop-Setup.exe'
+          $notes = Get-Content -LiteralPath (Join-Path $env:RUNNER_TEMP 'release-notes.md') -Raw
           if (Test-Path $installer) {
-            ./scripts/notify-discord.ps1 -InstallerPath $installer
+            ./scripts/notify-discord.ps1 -InstallerPath $installer -Changelog $notes
           } else {
-            ./scripts/notify-discord.ps1
+            ./scripts/notify-discord.ps1 -Changelog $notes
           }

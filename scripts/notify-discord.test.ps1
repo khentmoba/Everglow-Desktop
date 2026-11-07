@@ -2,11 +2,25 @@ $ErrorActionPreference = 'Stop'
 $env:DISCORD_WEBHOOK_URL = 'https://discord.invalid/api/webhooks/test/token'
 $env:GITHUB_REPOSITORY = 'khentmoba/Everglow-Desktop'
 $env:GITHUB_REF_NAME = 'v0.4.1'
+$env:RELEASE_NOTES = ''
 $env:RELEASE_CHANGELOG = "- Menu dropdown: Matches top bar UI`n- Shortcut support: Ctrl+Shift+M"
 
 function Invoke-RestMethod {
     param($Uri, $Method, $ContentType, $Body)
     $script:request = @{ Uri = $Uri; Method = $Method; ContentType = $ContentType; Body = $Body }
+}
+# The release body lookup must not reach GitHub from tests; report an empty release.
+function gh { $global:LASTEXITCODE = 1 }
+
+function Assert-Rejected([string]$Expected) {
+    $script:request = $null
+    try {
+        . "$PSScriptRoot/notify-discord.ps1"
+        throw "Expected failure: $Expected"
+    } catch {
+        if ($_.Exception.Message -notlike "$Expected*") { throw }
+    }
+    if ($script:request) { throw "Nothing may be posted when: $Expected" }
 }
 
 . "$PSScriptRoot/notify-discord.ps1"
@@ -35,15 +49,32 @@ if (-not $whatsNewField -or -not $whatsNewField.value.Contains('- Menu dropdown'
 
 if ($payload.allowed_mentions.parse.Count -ne 0) { throw 'Mentions must be disabled' }
 
-# Test truncation when changelog is oversized
-$env:RELEASE_CHANGELOG = '- ' + ('x' * 1500)
-. "$PSScriptRoot/notify-discord.ps1"
-$longPayload = [Text.Encoding]::UTF8.GetString($request.Body) | ConvertFrom-Json
-$longWhatsNew = $longPayload.embeds[0].fields | Where-Object { $_.name -eq "What's New" }
-if ($longWhatsNew.value.Length -gt 1024) { throw 'Field value must not exceed 1024 char limit' }
-if (-not $longWhatsNew.value.Contains('*(truncated)*')) { throw 'Oversized changelog must be truncated' }
-$env:RELEASE_CHANGELOG = ''
+# An explicit -Changelog wins over the environment.
+. "$PSScriptRoot/notify-discord.ps1" -Changelog '- Passed by the release workflow.'
+$explicit = ([Text.Encoding]::UTF8.GetString($request.Body) | ConvertFrom-Json).embeds[0].fields | Where-Object { $_.name -eq "What's New" }
+if ($explicit.value -ne '- Passed by the release workflow.') { throw 'Explicit changelog must be used' }
 
+# Oversized notes keep whole bullets and link to the full release notes.
+$bullets = 1..40 | ForEach-Object { "- Bullet number $_ describes one user-facing change." }
+$env:RELEASE_CHANGELOG = $bullets -join "`n"
+. "$PSScriptRoot/notify-discord.ps1"
+$longWhatsNew = ([Text.Encoding]::UTF8.GetString($request.Body) | ConvertFrom-Json).embeds[0].fields | Where-Object { $_.name -eq "What's New" }
+if ($longWhatsNew.value.Length -gt 1024) { throw 'Field value must not exceed 1024 char limit' }
+$lines = $longWhatsNew.value -split "`n"
+if ($lines[-1] -ne '- [Full release notes](https://github.com/khentmoba/Everglow-Desktop/releases/tag/v0.4.1)') { throw 'Truncated notes must link the full release notes' }
+foreach ($line in $lines[0..($lines.Count - 2)]) {
+    if ($line -notin $bullets) { throw "Truncation cut a bullet: $line" }
+}
+
+# Missing or commit-message notes fail before anything is posted.
+$env:RELEASE_CHANGELOG = ''
+Assert-Rejected 'Missing release notes.'
+$env:RELEASE_CHANGELOG = "Merge pull request #11 from khentmoba/t3/discord-release-notifications`n`nchore(release): prepare Everglow Desktop v0.6.0"
+Assert-Rejected 'Release notes look like commit messages.'
+$env:RELEASE_CHANGELOG = "- Added a real change.`n- fix(desktop): fill the monitor"
+Assert-Rejected 'Release notes look like commit messages.'
+
+$env:RELEASE_CHANGELOG = '- A real change.'
 $env:DISCORD_WEBHOOK_URL += '?thread_id=123'
 . "$PSScriptRoot/notify-discord.ps1"
 if (-not $request.Uri.EndsWith('?thread_id=123&wait=true')) { throw 'Existing webhook query must be preserved' }
