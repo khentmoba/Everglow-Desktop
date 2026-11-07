@@ -96,4 +96,6 @@ try {
     if ($_.Exception.Message -notlike 'Discord notification failed.*') { throw }
     if ($_.Exception.Message.Contains($env:DISCORD_WEBHOOK_URL)) { throw 'Webhook leaked in error' }
 }
+# The gh stub leaves LASTEXITCODE at 1, and the Actions pwsh wrapper exits with it.
+$global:LASTEXITCODE = 0
 Write-Output 'Discord notification checks passed (no network requests).'
