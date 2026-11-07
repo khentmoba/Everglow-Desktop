@@ -33,21 +33,9 @@ if (-not $Changelog) {
     } catch {}
 }
 
-if (-not $Changelog) {
-    try {
-        $commits = (& git log -1 --pretty=%B 2>$null)
-        if ($commits) {
-            if ($commits -is [array]) {
-                $Changelog = ($commits -join "`n").Trim()
-            } else {
-                $Changelog = ([string]$commits).Trim()
-            }
-        }
-    } catch {}
-}
-
-if (-not $Changelog) {
-    $Changelog = "Bug fixes and improvements."
+# No guessing from git history: a merge commit subject is not a changelog.
+if (-not $Changelog -or -not $Changelog.Trim()) {
+    throw 'Missing release notes. Add a CHANGELOG.md section for this version; nothing was posted to Discord.'
 }
 
 # Clean changelog: strip redundant markdown headers and trailing installer notes
@@ -59,9 +47,26 @@ if (-not $cleanChangelog) { $cleanChangelog = $Changelog }
 # Normalize bullet points to markdown list items
 $cleanChangelog = $cleanChangelog -replace '(?m)^[•*]\s*', '- '
 
-# Truncate if exceeding Discord embed field limit (1024 chars)
-if ($cleanChangelog.Length -gt 1000) {
-    $cleanChangelog = $cleanChangelog.Substring(0, 970).TrimEnd() + "`n... *(truncated)*"
+$commitStyle = '(?im)^(?:- )?(?:Merge (?:pull request|branch)\b|(?:feat|fix|chore|ci|docs|test|refactor|perf|build|style)(?:\([^)]*\))?!?:)'
+if ($cleanChangelog -match $commitStyle) {
+    throw 'Release notes look like commit messages. Write user-facing bullets in CHANGELOG.md; nothing was posted to Discord.'
+}
+
+# Discord embed fields hold 1024 characters. Keep whole bullets and link the full notes.
+$releaseUrl = "https://github.com/$env:GITHUB_REPOSITORY/releases/tag/$([Uri]::EscapeDataString($env:GITHUB_REF_NAME))"
+if ($cleanChangelog.Length -gt 1024) {
+    $more = "- [Full release notes]($releaseUrl)"
+    $budget = 1024 - $more.Length - 1
+    $kept = [System.Collections.Generic.List[string]]::new()
+    $used = 0
+    foreach ($bullet in [regex]::Split($cleanChangelog, '\r?\n(?=- )')) {
+        $cost = $bullet.Length + $(if ($kept.Count) { 1 } else { 0 })
+        if ($used + $cost -gt $budget) { break }
+        $kept.Add($bullet)
+        $used += $cost
+    }
+    if ($kept.Count -eq 0) { $kept.Add($cleanChangelog.Substring(0, $budget - 3).TrimEnd() + '...') }
+    $cleanChangelog = ($kept -join "`n") + "`n" + $more
 }
 
 # 2. Resolve installer path or download URL
