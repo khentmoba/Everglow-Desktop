@@ -20,38 +20,83 @@ use webview2_com::{
     take_pwstr, ContainsFullScreenElementChangedEventHandler, Microsoft::Web::WebView2::Win32::*,
     WebResourceRequestedEventHandler,
 };
-use windows::core::{w, Interface, BOOL, PWSTR};
+use windows::{
+    core::{w, Interface, BOOL, PWSTR},
+    Win32::{
+        Foundation::{HWND, LPARAM, LRESULT, WPARAM},
+        Graphics::Dwm::{DwmSetWindowAttribute, DWMWA_TRANSITIONS_FORCEDISABLED},
+        UI::{
+            Shell::{DefSubclassProc, SetWindowSubclass},
+            WindowsAndMessaging::{
+                IsZoomed, SWP_ASYNCWINDOWPOS, SWP_FRAMECHANGED, SWP_NOMOVE, SWP_NOSIZE, WINDOWPOS,
+                WM_NCCALCSIZE, WM_WINDOWPOSCHANGING,
+            },
+        },
+    },
+};
 pub(crate) const VERIFY_BROWSER_ARGS: &str = "--remote-debugging-port=18766 --remote-debugging-address=127.0.0.1 --host-resolver-rules=\"MAP filemoon.test 127.0.0.1\"";
 
+unsafe extern "system" fn fullscreen_subclass(
+    hwnd: HWND,
+    msg: u32,
+    wparam: WPARAM,
+    lparam: LPARAM,
+    _id: usize,
+    data: usize,
+) -> LRESULT {
+    let state = &*(data as *const desktop::DesktopState);
+    if msg == WM_WINDOWPOSCHANGING && state.fullscreen_transition.load(Ordering::Acquire) {
+        let pos = &mut *(lparam.0 as *mut WINDOWPOS);
+        let frame_only = (pos.flags & (SWP_NOMOVE | SWP_NOSIZE)) == (SWP_NOMOVE | SWP_NOSIZE);
+        if frame_only && (state.fullscreen.load(Ordering::Acquire) || !IsZoomed(hwnd).as_bool()) {
+            pos.flags &= !SWP_FRAMECHANGED;
+        } else {
+            pos.flags = (pos.flags & !SWP_ASYNCWINDOWPOS) | SWP_FRAMECHANGED;
+        }
+    } else if msg == WM_NCCALCSIZE
+        && wparam != WPARAM(0)
+        && state.fullscreen.load(Ordering::Acquire)
+    {
+        return LRESULT(0);
+    }
+    DefSubclassProc(hwnd, msg, wparam, lparam)
+}
+
 pub(crate) fn set_fullscreen(window: &tauri::WebviewWindow, fullscreen: bool) -> tauri::Result<()> {
+    if window.is_fullscreen()? == fullscreen {
+        return chrome::sync_window(window);
+    }
     if fullscreen {
         desktop::save_layout(window);
-        // A maximized window keeps its work-area client size in fullscreen,
-        // leaving a taskbar-sized strip behind. Restore it first, then put the
-        // maximized state back when fullscreen ends.
-        if !window.is_fullscreen()? {
-            let maximized = window.is_maximized()?;
-            window
-                .state::<desktop::DesktopState>()
-                .fullscreen_was_maximized
-                .store(maximized, Ordering::Relaxed);
-            if maximized {
-                window.unmaximize()?;
-            }
-        }
     }
-    window.set_fullscreen(fullscreen)?;
-    window
-        .state::<desktop::DesktopState>()
-        .fullscreen
-        .store(fullscreen, Ordering::Relaxed);
-    if !fullscreen
-        && window
-            .state::<desktop::DesktopState>()
-            .fullscreen_was_maximized
-            .swap(false, Ordering::Relaxed)
-    {
-        window.maximize()?;
+    let hwnd = window.hwnd()?;
+    let state = window.state::<desktop::DesktopState>();
+    state.fullscreen.store(fullscreen, Ordering::Release);
+    state.fullscreen_transition.store(true, Ordering::Release);
+    unsafe {
+        let disable = BOOL::from(true);
+        let _ = DwmSetWindowAttribute(
+            hwnd,
+            DWMWA_TRANSITIONS_FORCEDISABLED,
+            &disable as *const _ as *const _,
+            std::mem::size_of::<BOOL>() as u32,
+        );
+    }
+    let result = window.set_fullscreen(fullscreen);
+    state.fullscreen_transition.store(false, Ordering::Release);
+    unsafe {
+        let disable = BOOL::from(false);
+        let _ = DwmSetWindowAttribute(
+            hwnd,
+            DWMWA_TRANSITIONS_FORCEDISABLED,
+            &disable as *const _ as *const _,
+            std::mem::size_of::<BOOL>() as u32,
+        );
+    }
+    result?;
+    if !fullscreen {
+        let _ = window
+            .eval("if (document.fullscreenElement) document.exitFullscreen().catch(() => {})");
     }
     chrome::sync_window(window)
 }
@@ -201,6 +246,7 @@ fn main() {
         let mut builder = WebviewWindowBuilder::new(app, "main", WebviewUrl::External("about:blank".parse()?))
             .title("Everglow Desktop — protected")
             .inner_size(1280.0, 850.0).min_inner_size(420.0, 600.0)
+            .background_color(tauri::webview::Color(16, 16, 17, 255))
             .menu(menu).decorations(false).visible(false).browser_extensions_enabled(true)
             .initialization_script(website_bridge::SCRIPT.replace("__VERSION__", env!("CARGO_PKG_VERSION")))
             .initialization_script(chrome::script(verify))
@@ -216,6 +262,12 @@ fn main() {
                 return Ok(());
             }
         };
+        if let Ok(hwnd) = window.hwnd() {
+            let state = &*window.state::<desktop::DesktopState>() as *const desktop::DesktopState as usize;
+            unsafe {
+                let _ = SetWindowSubclass(hwnd, Some(fullscreen_subclass), 1, state);
+            }
+        }
         window.hide_menu()?;
         chrome::watch_top_edge(&window);
         let resized_window = window.clone();
