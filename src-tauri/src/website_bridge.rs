@@ -3,8 +3,8 @@ use tauri::{Manager, WebviewWindow};
 use webview2_com::{take_pwstr, WebMessageReceivedEventHandler};
 use windows::core::PWSTR;
 
-pub const SCRIPT: &str = r#"
-if (window === window.top && location.origin === 'https://everglow-1c6db.web.app') {
+const SCRIPT: &str = r#"
+if (window === window.top && location.origin === '__EVERGLOW_ORIGIN__') {
   Object.defineProperty(window, '__everglowDesktopVersion', { value: '__VERSION__' });
   Object.defineProperty(window, '__everglowCheckForUpdates', {
     value: () => window.chrome.webview.postMessage('everglow-desktop-check-updates')
@@ -12,11 +12,17 @@ if (window === window.top && location.origin === 'https://everglow-1c6db.web.app
 }
 "#;
 
+pub fn script() -> String {
+    SCRIPT
+        .replace("__EVERGLOW_ORIGIN__", crate::origins::PRIMARY)
+        .replace("__VERSION__", env!("CARGO_PKG_VERSION"))
+}
+
 fn accepts(source: &str, message: &str) -> bool {
     let Ok(url) = url::Url::parse(source) else {
         return false;
     };
-    url.origin().ascii_serialization() == "https://everglow-1c6db.web.app"
+    url.origin().ascii_serialization() == crate::origins::PRIMARY
         && message == "everglow-desktop-check-updates"
 }
 

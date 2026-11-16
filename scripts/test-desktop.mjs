@@ -8,6 +8,7 @@ import { resolve } from 'node:path';
 let adHits = 0;
 let cacheHits = 0;
 const port = Number(process.env.EVERGLOW_VERIFY_PORT || 18765);
+const debugPort = Number(process.env.EVERGLOW_VERIFY_DEBUG_PORT || 18766);
 const server = createServer((req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   if (req.url.startsWith('/desktop-ad-probe')) { adHits++; res.end('window.adExecuted=true'); return; }
@@ -51,6 +52,14 @@ async function until(check, timeoutMs = 5000) {
   }
   return false;
 }
+// Native window state comes from a PowerShell probe; poll it the same way as page state.
+async function untilNative(check, timeoutMs = 5000) {
+  for (let elapsed = 0; elapsed <= timeoutMs; elapsed += 100) {
+    try { if (check()) return true; } catch {}
+    await delay(100);
+  }
+  return false;
+}
 async function connectTarget(target) {
   ws?.close();
   ws = new WebSocket(target.webSocketDebuggerUrl);
@@ -66,7 +75,7 @@ async function connectTarget(target) {
 async function waitForTarget(matches) {
   for (let n = 0; n < 200; n++) {
     try {
-      const targets = await (await fetch('http://127.0.0.1:18766/json/list')).json();
+      const targets = await (await fetch(`http://127.0.0.1:${debugPort}/json/list`)).json();
       const target = targets.find(t => t.type === 'page' && matches(t));
       if (target) return target;
     } catch {}
@@ -76,10 +85,10 @@ async function waitForTarget(matches) {
 }
 async function waitForDebuggerExit() {
   for (let n = 0; n < 100; n++) {
-    try { await fetch('http://127.0.0.1:18766/json/version'); } catch { return; }
+    try { await fetch(`http://127.0.0.1:${debugPort}/json/version`); } catch { return; }
     await delay(100);
   }
-  assert.fail('Verification debug port 18766 is still in use');
+  assert.fail(`Verification debug port ${debugPort} is still in use`);
 }
 const results = [];
 try {
@@ -99,7 +108,7 @@ try {
   results.push('Untrusted local page receives no desktop update bridge');
   assert(await until(() => evaluate("getComputedStyle(document.getElementById('cosmetic-ad')).display === 'none'")), 'Complete mode must hide generic ad elements');
   await evaluate("document.querySelector('iframe').contentWindow.postMessage('inspect','*')");
-  await delay(400);
+  assert(await until(() => evaluate('!!window.frameProof')), 'Cross-origin frame must answer the inspection message');
   const frameProof = await evaluate('window.frameProof');
   assert.equal(frameProof?.frameCosmetic, 'none', 'Cross-origin iframe cosmetics must work');
   assert.equal(frameProof.scriptletAbortedAdAccess, true, 'Real filemoon.* scriptlet must abort the ad script property access');
@@ -116,7 +125,7 @@ try {
 
   await evaluate("window.open('https://popup-test.invalid', '_blank'); 'attempted'");
   await delay(400);
-  const targets = await (await fetch('http://127.0.0.1:18766/json/list')).json();
+  const targets = await (await fetch(`http://127.0.0.1:${debugPort}/json/list`)).json();
   assert(!targets.some(t => t.url.includes('popup-test.invalid')));
   results.push('Popup denied: no new browser/webview target');
 
@@ -223,14 +232,11 @@ try {
   results.push('Real mouse drag on the title bar moves the restored native window');
   const clickControl = action => evaluate(`(() => { const host = document.querySelector('everglow-titlebar'); host.dispatchEvent(new PointerEvent('pointerenter')); host.shadowRoot.querySelector('[data-action=${action}]').click(); return true; })()`);
   await clickControl('maximize');
-  await delay(300);
-  assert.equal(windowState().maximized, true, 'Maximize button maximizes the native window');
+  assert(await untilNative(() => windowState().maximized), 'Maximize button maximizes the native window');
   await clickControl('maximize');
-  await delay(300);
-  assert.equal(windowState().maximized, false, 'Restore button restores the native window');
+  assert(await untilNative(() => windowState().maximized === false), 'Restore button restores the native window');
   await clickControl('minimize');
-  await delay(300);
-  assert.equal(windowState().minimized, true, 'Minimize button minimizes the native window');
+  assert(await untilNative(() => windowState().minimized), 'Minimize button minimizes the native window');
   const duplicate = launch();
   await new Promise((resolve, reject) => { duplicate.once('error', reject); duplicate.once('exit', code => { try { assert.equal(code, 0); resolve(); } catch (error) { reject(error); } }); });
   await delay(300);
@@ -244,8 +250,7 @@ try {
   assert.equal(await evaluate("document.querySelector('everglow-titlebar').shadowRoot.querySelector('.settings').open"), true);
   const setting = name => evaluate(`document.querySelector('everglow-titlebar').shadowRoot.querySelector('[name=${name}]').click(); true`);
   await setting('titlebar');
-  await delay(200);
-  assert.equal(JSON.parse(readFileSync(resolve(settingsDir, 'desktop-settings.json'))).alwaysShowTitlebar, true);
+  assert(await until(() => JSON.parse(readFileSync(resolve(settingsDir, 'desktop-settings.json'))).alwaysShowTitlebar), 'Title-bar preference must persist');
   await evaluate("document.cookie='session_probe=preserved; path=/'; localStorage.setItem('session_probe','preserved'); true");
   await evaluate("fetch('/cache-probe').then(r=>r.text())");
   await evaluate("fetch('/cache-probe').then(r=>r.text())");
@@ -302,38 +307,35 @@ try {
     window.addEventListener('everglow-window-state', e => window.__fsStateLog.push({ fullscreen: e.detail.fullscreen, maximized: e.detail.maximized }));
   })()`);
   execFileSync('powershell', ['-NoProfile', '-File', 'scripts/fullscreen-window.ps1', '-AppProcessId', String(child.pid), '-WindowState', 'Maximize'], { windowsHide: true });
-  await delay(400);
-  assert.equal(windowState().maximized, true, 'Fullscreen regression starts from a maximized window');
+  assert(await untilNative(() => windowState().maximized), 'Fullscreen regression starts from a maximized window');
   const maximizedViewport = await evaluate('({ w: innerWidth, h: innerHeight })');
   await evaluate('window.__fsResizeLog = []; window.__fsStateLog = []; true');
   await evaluate("document.getElementById('video').requestFullscreen().then(()=>true)", { userGesture: true });
-  await delay(500);
-  assert.equal(await evaluate('!!document.fullscreenElement'), true);
+  assert(await until(() => evaluate('!!document.fullscreenElement')), 'DOM fullscreen must engage');
   assert.deepEqual(nativeWindow(), { menuVisible: false, fillsMonitor: true }, 'Fullscreen from a maximized window must fill the monitor, not just the work area');
   const fullscreenViewport = await evaluate('({ w: innerWidth, h: innerHeight })');
   assert.deepEqual(await evaluate('window.__fsResizeLog'), [fullscreenViewport], 'Maximized fullscreen entry must resize in a single step without unmaximizing');
   assert.deepEqual(await evaluate('window.__fsStateLog'), [{ fullscreen: true, maximized: true }], 'Maximized fullscreen entry must preserve maximized state without intermediate false states');
   await evaluate('window.__fsResizeLog = []; window.__fsStateLog = []; true');
   await evaluate('document.exitFullscreen().then(()=>true)');
-  await delay(500);
+  assert(await until(() => evaluate('!document.fullscreenElement')), 'DOM fullscreen must exit');
   assert.equal(windowState().maximized, true, 'Leaving fullscreen restores the maximized window');
   assert.equal(nativeWindow().menuVisible, false, 'Leaving fullscreen keeps the native menu hidden');
   assert.deepEqual(await evaluate('window.__fsResizeLog'), [maximizedViewport], 'Maximized fullscreen exit must resize directly back to the maximized work area in a single step');
   assert.deepEqual(await evaluate('window.__fsStateLog'), [{ fullscreen: false, maximized: true }], 'Maximized fullscreen exit must emit a single non-fullscreen maximized state');
   execFileSync('powershell', ['-NoProfile', '-File', 'scripts/fullscreen-window.ps1', '-AppProcessId', String(child.pid), '-WindowState', 'Restore'], { windowsHide: true });
-  await delay(400);
+  assert(await untilNative(() => windowState().maximized === false), 'Window must restore after maximized fullscreen');
   assert.deepEqual(await evaluate('({ w: innerWidth, h: innerHeight })'), restoredBeforeMax, 'Restoring after a maximized fullscreen cycle preserves normal window bounds');
   results.push('Fullscreen from a maximized window transitions in a single step and restores the maximized window on exit');
   for (let n = 0; n < 2; n++) {
     await evaluate('window.__fsResizeLog = []; true');
     await evaluate("document.getElementById('video').requestFullscreen().then(()=>true)", { userGesture: true });
-    await delay(400);
-    assert.equal(await evaluate('!!document.fullscreenElement'), true);
+    assert(await until(() => evaluate('!!document.fullscreenElement')), 'Video fullscreen must engage');
     assert.deepEqual(nativeWindow(), { menuVisible: false, fillsMonitor: true }, 'Video fullscreen must hide the native menu and fill the monitor');
     assert.deepEqual(await evaluate('window.__fsResizeLog'), [fullscreenViewport], 'Video fullscreen entry must resize in a single step without intermediate frame-inset resizes');
     await evaluate('window.__fsResizeLog = []; true');
     await evaluate('document.exitFullscreen().then(()=>true)');
-    await delay(400);
+    assert(await until(() => evaluate('!document.fullscreenElement')), 'Video fullscreen must exit');
     assert.equal(nativeWindow().menuVisible, false, 'Exiting video fullscreen returns to hidden chrome');
     assert.deepEqual(await evaluate('window.__fsResizeLog'), [restoredBeforeMax], 'Video fullscreen exit must resize directly back to restored bounds in a single step');
     await movePointer('Top');
@@ -341,23 +343,19 @@ try {
     await movePointer('Content');
   }
   await evaluate("document.getElementById('video').requestFullscreen().then(()=>true)", { userGesture: true });
-  await delay(400);
-  assert.equal(await evaluate('!!document.fullscreenElement'), true);
+  assert(await until(() => evaluate('!!document.fullscreenElement')), 'Final video fullscreen must engage');
   nativeWindow(true);
-  await delay(400);
-  assert.equal(await evaluate('!!document.fullscreenElement'), false, 'Exiting native fullscreen via F11 also exits DOM fullscreen');
+  assert(await until(() => evaluate('!document.fullscreenElement')), 'Exiting native fullscreen via F11 also exits DOM fullscreen');
   assert.deepEqual(nativeWindow(), { menuVisible: false, fillsMonitor: false }, 'F11 exits video fullscreen cleanly');
   results.push('Repeated video fullscreen transitions in a single step, syncs F11 exit, and restores auto-hide on exit');
   for (let n = 0; n < 2; n++) {
     nativeWindow(true);
-    await delay(400);
-    assert.deepEqual(nativeWindow(), { menuVisible: false, fillsMonitor: true }, 'F11 fullscreen must hide the native menu and fill the monitor');
+    assert(await untilNative(() => nativeWindow().fillsMonitor), 'F11 fullscreen must hide the native menu and fill the monitor');
     await movePointer('Top');
     assert.equal((await chromeState()).captionVisible, false, 'Hover must not expose the title bar in fullscreen');
     await movePointer('Content');
     nativeWindow(true);
-    await delay(400);
-    assert.equal(nativeWindow().menuVisible, false, 'F11 returns to hidden chrome');
+    assert(await untilNative(() => nativeWindow().menuVisible === false), 'F11 returns to hidden chrome');
     await movePointer('Top');
     assert.equal((await chromeState()).captionVisible, true, 'Hover reveal resumes after F11');
     await movePointer('Content');
@@ -424,23 +422,20 @@ try {
   await connectTarget(startupTarget);
   assert.equal(await evaluate('document.getElementById("heading").textContent'), 'Couldn’t open Everglow');
   await evaluate('document.getElementById("retry").click(); true');
-  await delay(500);
   await connectTarget(await waitForTarget(t => t.id === target.id && t.url === `http://127.0.0.1:${port}/`));
-  assert.equal(windowState().visible, true);
+  assert(await untilNative(() => windowState().visible), 'Retry must show the main window');
   assert.equal(await evaluate("fetch('/desktop-ad-probe-fetch').then(r=>r.status)"), 204, 'Protection survives offline recovery');
   results.push('Offline navigation shows recovery; Retry reconnects with protection still active');
 
   await evaluate("location.href='/unavailable'; true");
-  await delay(600);
-  assert.equal(windowState().visible, false, 'Failed navigation hides the unusable main page');
+  assert(await untilNative(() => windowState().visible === false), 'Failed navigation hides the unusable main page');
   await connectTarget(startupTarget);
   assert.equal(await evaluate('document.getElementById("heading").textContent'), 'Couldn’t open Everglow');
   assert.equal(await evaluate('document.querySelector(".actions").hidden'), false);
   writeFileSync('evidence/startup-recovery.png', Buffer.from((await cdp('Page.captureScreenshot')).data, 'base64'));
   await evaluate('document.getElementById("retry").click(); true');
-  await delay(500);
   await connectTarget(await waitForTarget(t => t.id === target.id && t.url === `http://127.0.0.1:${port}/`));
-  assert.equal(windowState().visible, true, 'Retry restores the protected main window');
+  assert(await untilNative(() => windowState().visible), 'Retry restores the protected main window');
   results.push('HTTP failure shows actionable recovery; Retry reconnects without bypassing protection');
 
   // Render synthetic HTML at the trusted origin without requesting live data.

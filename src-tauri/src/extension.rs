@@ -38,7 +38,9 @@ fn wait_for_protection(
                 if args.TryGetWebMessageAsString(&mut message).is_ok()
                     && take_pwstr(message) == "everglow-desktop-protection-ready"
                 {
-                    ready_core.remove_WebMessageReceived(remove_token.get())?;
+                    if let Err(err) = ready_core.remove_WebMessageReceived(remove_token.get()) {
+                        log_error!("Remove protection-ready handler: {err}");
+                    }
                     if let Err(err) = crate::startup::connect(&window) {
                         log_error!("Open Everglow: {err}");
                         crate::startup::fail(

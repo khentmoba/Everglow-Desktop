@@ -6,6 +6,7 @@ mod blocker;
 mod chrome;
 mod desktop;
 mod extension;
+mod origins;
 mod popups;
 mod startup;
 mod updater;
@@ -34,8 +35,6 @@ use windows::{
         },
     },
 };
-pub(crate) const VERIFY_BROWSER_ARGS: &str = "--remote-debugging-port=18766 --remote-debugging-address=127.0.0.1 --host-resolver-rules=\"MAP filemoon.test 127.0.0.1\"";
-
 unsafe extern "system" fn fullscreen_subclass(
     hwnd: HWND,
     msg: u32,
@@ -71,7 +70,7 @@ pub(crate) fn set_fullscreen(window: &tauri::WebviewWindow, fullscreen: bool) ->
     }
     let hwnd = window.hwnd()?;
     let state = window.state::<desktop::DesktopState>();
-    state.fullscreen.store(fullscreen, Ordering::Release);
+    let previous = state.fullscreen.swap(fullscreen, Ordering::AcqRel);
     state.fullscreen_transition.store(true, Ordering::Release);
     unsafe {
         let disable = BOOL::from(true);
@@ -83,6 +82,11 @@ pub(crate) fn set_fullscreen(window: &tauri::WebviewWindow, fullscreen: bool) ->
         );
     }
     let result = window.set_fullscreen(fullscreen);
+    if result.is_err() {
+        // The subclass uses this flag to hide the window border; keep it in sync with the
+        // actual window state when the native call fails.
+        state.fullscreen.store(previous, Ordering::Release);
+    }
     state.fullscreen_transition.store(false, Ordering::Release);
     unsafe {
         let disable = BOOL::from(false);
@@ -248,12 +252,15 @@ fn main() {
             .inner_size(1280.0, 850.0).min_inner_size(420.0, 600.0)
             .background_color(tauri::webview::Color(16, 16, 17, 255))
             .menu(menu).decorations(false).visible(false).browser_extensions_enabled(true)
-            .initialization_script(website_bridge::SCRIPT.replace("__VERSION__", env!("CARGO_PKG_VERSION")))
+            .initialization_script(website_bridge::script())
             .initialization_script(chrome::script(verify))
             .on_page_load(|window, _| { let _ = chrome::sync_window(&window); })
             .data_directory(profile)
             .on_navigation(move |url| allow_navigation(url, verify));
-        if verify { builder = builder.additional_browser_args(VERIFY_BROWSER_ARGS); }
+        if verify {
+            let args = blocker::verify_browser_args();
+            builder = builder.additional_browser_args(&args);
+        }
         let window = match builder.build() {
             Ok(window) => window,
             Err(error) => {

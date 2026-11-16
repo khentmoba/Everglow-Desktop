@@ -74,15 +74,14 @@ fn read_pointer(hwnd: HWND, was_at_edge: bool, suppressed: bool) -> Option<Readi
 }
 
 pub fn script(verify: bool) -> String {
+    let mut allowed: Vec<&str> = crate::origins::ORIGINS.to_vec();
+    let verify_origin = format!("http://127.0.0.1:{}", crate::blocker::verification_port());
+    if verify {
+        allowed.push(&verify_origin);
+    }
+    let origins = serde_json::to_string(&allowed).unwrap_or_else(|_| "[]".into());
     include_str!("../../ui/chrome.js")
-        .replace(
-            "__VERIFY_ORIGIN__",
-            &if verify {
-                format!("http://127.0.0.1:{}", crate::blocker::verification_port())
-            } else {
-                String::new()
-            },
-        )
+        .replace("__EVERGLOW_ORIGINS__", &origins)
         .replace("__VERSION__", env!("CARGO_PKG_VERSION"))
 }
 
@@ -90,12 +89,10 @@ pub(crate) fn trusted(source: &str, verify: bool) -> bool {
     let Ok(url) = url::Url::parse(source) else {
         return false;
     };
-    matches!(
-        url.origin().ascii_serialization().as_str(),
-        "https://everglow-1c6db.web.app" | "https://everglow-1c6db.firebaseapp.com"
-    ) || (verify
-        && url.origin().ascii_serialization()
-            == format!("http://127.0.0.1:{}", crate::blocker::verification_port()))
+    crate::origins::allows_origin(&url)
+        || (verify
+            && url.origin().ascii_serialization()
+                == format!("http://127.0.0.1:{}", crate::blocker::verification_port()))
 }
 
 pub fn set_title<R: tauri::Runtime>(window: &WebviewWindow<R>, title: &str) -> tauri::Result<()> {
