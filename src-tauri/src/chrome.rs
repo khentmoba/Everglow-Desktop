@@ -130,11 +130,10 @@ pub fn watch_top_edge(window: &WebviewWindow) {
     std::thread::spawn(move || {
         let mut was_at_edge = false;
         loop {
-            let fullscreen = window
-                .state::<crate::desktop::DesktopState>()
-                .fullscreen
-                .load(Ordering::Relaxed);
-            let Some(reading) = read_pointer(HWND(raw as *mut _), was_at_edge, fullscreen) else {
+            let desktop = window.state::<crate::desktop::DesktopState>();
+            let suppressed = desktop.fullscreen.load(Ordering::Relaxed)
+                || desktop.always_show_titlebar.load(Ordering::Relaxed);
+            let Some(reading) = read_pointer(HWND(raw as *mut _), was_at_edge, suppressed) else {
                 break;
             };
             if reading.at_edge != was_at_edge {
@@ -225,7 +224,6 @@ pub fn install(
                 if let Err(error) = result {
                     log_error!("Desktop top bar: {error}");
                 }
-                let _ = sync_window(&window);
                 Ok(())
             })),
             &mut token,

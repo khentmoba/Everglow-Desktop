@@ -43,20 +43,23 @@ pub struct DesktopState {
     pub cache_busy: std::sync::atomic::AtomicBool,
     pub fullscreen_transition: std::sync::atomic::AtomicBool,
     pub fullscreen: std::sync::atomic::AtomicBool,
+    pub always_show_titlebar: std::sync::atomic::AtomicBool,
 }
 
 impl DesktopState {
     pub fn load(path: PathBuf) -> Self {
-        let preferences = std::fs::read(&path)
+        let preferences: Preferences = std::fs::read(&path)
             .ok()
             .and_then(|bytes| serde_json::from_slice(&bytes).ok())
             .unwrap_or_default();
+        let always_show_titlebar = preferences.always_show_titlebar;
         Self {
             path,
             preferences: Mutex::new(preferences),
             cache_busy: false.into(),
             fullscreen_transition: false.into(),
             fullscreen: false.into(),
+            always_show_titlebar: always_show_titlebar.into(),
         }
     }
 
@@ -86,6 +89,10 @@ impl DesktopState {
             next.remember_layout = !next.remember_layout;
         }
         self.write(&next)?;
+        self.always_show_titlebar.store(
+            next.always_show_titlebar,
+            std::sync::atomic::Ordering::Release,
+        );
         *preferences = next;
         Ok(())
     }
@@ -136,14 +143,18 @@ pub fn save_layout<R: tauri::Runtime>(window: &WebviewWindow<R>) {
             GetWindowPlacement(window.hwnd()?, &mut placement)?;
         }
         let rect = placement.rcNormalPosition;
-        preferences.layout = Some(Layout {
+        let next_layout = Layout {
             left: rect.left,
             top: rect.top,
             width: (rect.right - rect.left).max(420) as u32,
             height: (rect.bottom - rect.top).max(600) as u32,
             maximized: placement.showCmd == SW_SHOWMAXIMIZED.0 as u32
                 || placement.flags.0 & WPF_RESTORETOMAXIMIZED.0 != 0,
-        });
+        };
+        if preferences.layout.as_ref() == Some(&next_layout) {
+            return Ok(());
+        }
+        preferences.layout = Some(next_layout);
         state.write(&preferences)
     })();
     if let Err(error) = result {

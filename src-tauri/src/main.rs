@@ -27,10 +27,10 @@ use windows::{
         Foundation::{HWND, LPARAM, LRESULT, WPARAM},
         Graphics::Dwm::{DwmSetWindowAttribute, DWMWA_TRANSITIONS_FORCEDISABLED},
         UI::{
-            Shell::{DefSubclassProc, SetWindowSubclass},
+            Shell::{DefSubclassProc, RemoveWindowSubclass, SetWindowSubclass},
             WindowsAndMessaging::{
                 IsZoomed, SWP_ASYNCWINDOWPOS, SWP_FRAMECHANGED, SWP_NOMOVE, SWP_NOSIZE, WINDOWPOS,
-                WM_NCCALCSIZE, WM_WINDOWPOSCHANGING,
+                WM_NCCALCSIZE, WM_NCDESTROY, WM_WINDOWPOSCHANGING,
             },
         },
     },
@@ -57,6 +57,8 @@ unsafe extern "system" fn fullscreen_subclass(
         && state.fullscreen.load(Ordering::Acquire)
     {
         return LRESULT(0);
+    } else if msg == WM_NCDESTROY {
+        let _ = RemoveWindowSubclass(hwnd, Some(fullscreen_subclass), _id);
     }
     DefSubclassProc(hwnd, msg, wparam, lparam)
 }
@@ -149,19 +151,18 @@ fn install_blocking(
                 let uri = take_pwstr(uri);
                 let mut referer = PWSTR::null();
                 let headers = request.Headers()?;
-                let source = if headers.GetHeader(w!("Referer"), &mut referer).is_ok() {
-                    let source = take_pwstr(referer);
-                    if source.is_empty() {
-                        HOME.to_owned()
-                    } else {
-                        source
-                    }
+                let referer_header = if headers.GetHeader(w!("Referer"), &mut referer).is_ok() {
+                    Some(take_pwstr(referer))
                 } else {
-                    HOME.to_owned()
+                    None
                 };
+                let source = referer_header
+                    .as_deref()
+                    .filter(|s| !s.is_empty())
+                    .unwrap_or(HOME);
                 let mut context = COREWEBVIEW2_WEB_RESOURCE_CONTEXT_ALL;
                 args.ResourceContext(&mut context)?;
-                if blocker.blocks(&uri, &source, request_kind(context)) {
+                if blocker.blocks(&uri, source, request_kind(context)) {
                     let response = environment.CreateWebResourceResponse(
                         None,
                         204,
