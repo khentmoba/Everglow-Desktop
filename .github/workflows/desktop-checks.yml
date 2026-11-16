@@ -34,3 +34,28 @@ jobs:
           $installer = @(Get-ChildItem src-tauri/target/release/bundle/nsis/*-setup.exe)
           if ($installer.Count -ne 1) { throw 'Expected one test installer' }
           ./scripts/test-installer.ps1 -Installer $installer[0].FullName
+
+  native:
+    name: Native desktop verification
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: dtolnay/rust-toolchain@stable
+      - run: npm ci
+      - name: Build debug desktop app
+        run: cargo build --manifest-path src-tauri/Cargo.toml
+      - name: Run WebView2 verification suite
+        run: npm test
+        env:
+          EVERGLOW_EVIDENCE_DIR: ${{ runner.temp }}/everglow-evidence
+      - name: Upload verification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-verification-evidence
+          path: ${{ runner.temp }}/everglow-evidence
+          if-no-files-found: ignore
