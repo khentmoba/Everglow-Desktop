@@ -1,20 +1,36 @@
 use adblock::{lists::ParseOptions, request::Request, Engine};
 use std::{
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::{
         atomic::{AtomicBool, AtomicUsize, Ordering},
-        Arc, Mutex,
+        Arc, RwLock,
     },
     time::Duration,
 };
 use url::Url;
 
-pub const HOME: &str = "https://everglow-1c6db.web.app/";
-pub fn verification_port() -> u16 {
-    std::env::var("EVERGLOW_VERIFY_PORT")
+pub use crate::origins::HOME;
+
+fn env_port(name: &str, default: u16) -> u16 {
+    std::env::var(name)
         .ok()
         .and_then(|port| port.parse().ok())
-        .unwrap_or(18765)
+        .unwrap_or(default)
+}
+
+pub fn verification_port() -> u16 {
+    env_port("EVERGLOW_VERIFY_PORT", 18765)
+}
+
+pub fn verification_debug_port() -> u16 {
+    env_port("EVERGLOW_VERIFY_DEBUG_PORT", 18766)
+}
+
+pub fn verify_browser_args() -> String {
+    format!(
+        "--remote-debugging-port={} --remote-debugging-address=127.0.0.1 --host-resolver-rules=\"MAP filemoon.test 127.0.0.1\"",
+        verification_debug_port()
+    )
 }
 const EASYLIST: &str = include_str!("../lists/easylist.txt");
 const EASYPRIVACY: &str = include_str!("../lists/easyprivacy.txt");
@@ -24,7 +40,7 @@ const LIST_URLS: [&str; 2] = [
 ];
 
 pub struct Blocker {
-    engine: Mutex<Engine>,
+    engine: RwLock<Engine>,
     pub enabled: AtomicBool,
     pub blocked: AtomicUsize,
     pub popups: AtomicUsize,
@@ -39,17 +55,16 @@ fn valid_list(text: &str) -> bool {
 }
 
 fn essential(url: &Url) -> bool {
-    matches!(
-        url.host_str(),
-        Some(
-            "everglow-1c6db.web.app"
-                | "everglow-1c6db.firebaseapp.com"
-                | "firestore.googleapis.com"
-                | "identitytoolkit.googleapis.com"
-                | "securetoken.googleapis.com"
-                | "us-central1-everglow-1c6db.cloudfunctions.net"
+    crate::origins::allows_host(url)
+        || matches!(
+            url.host_str(),
+            Some(
+                "firestore.googleapis.com"
+                    | "identitytoolkit.googleapis.com"
+                    | "securetoken.googleapis.com"
+                    | "us-central1-everglow-1c6db.cloudfunctions.net"
+            )
         )
-    )
 }
 
 impl Blocker {
@@ -64,7 +79,7 @@ impl Blocker {
             text.push_str("\n/desktop-ad-probe\n");
         }
         Arc::new(Self {
-            engine: Mutex::new(engine(&text)),
+            engine: RwLock::new(engine(&text)),
             enabled: AtomicBool::new(true),
             blocked: AtomicUsize::new(0),
             popups: AtomicUsize::new(0),
@@ -86,7 +101,7 @@ impl Blocker {
         };
         let blocked = self
             .engine
-            .lock()
+            .read()
             .expect("adblock lock")
             .check_network_request(&request)
             .matched;
@@ -121,11 +136,8 @@ impl Blocker {
                 let text = lists.join("\n");
                 let updated = engine(&text);
                 // Build outside the lock so list downloads/parsing never stall the player.
-                *blocker.engine.lock().expect("adblock lock") = updated;
-                if let Some(parent) = cache.parent() {
-                    std::fs::create_dir_all(parent)?;
-                }
-                std::fs::write(cache, text)?;
+                *blocker.engine.write().expect("adblock lock") = updated;
+                write_cache(&cache, &text)?;
                 Ok(())
             })();
             if let Err(err) = result {
@@ -135,14 +147,21 @@ impl Blocker {
     }
 }
 
+/// Replace the cached rules atomically: a crash mid-write must never leave a truncated list
+/// that would silently disable the freshly downloaded rules on the next launch.
+fn write_cache(cache: &Path, text: &str) -> std::io::Result<()> {
+    if let Some(parent) = cache.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let temporary = cache.with_extension("txt.tmp");
+    std::fs::write(&temporary, text)?;
+    std::fs::rename(&temporary, cache)
+}
+
 pub fn allow_navigation(url: &Url, verify: bool) -> bool {
     url.as_str() == "about:blank"
         || url.scheme() == "chrome-extension"
-        || (url.scheme() == "https"
-            && matches!(
-                url.host_str(),
-                Some("everglow-1c6db.web.app" | "everglow-1c6db.firebaseapp.com")
-            ))
+        || (url.scheme() == "https" && crate::origins::allows_host(url))
         || (verify
             && url.scheme() == "http"
             && url.host_str() == Some("127.0.0.1")
@@ -200,5 +219,16 @@ mod tests {
         assert!(!valid_list("<html>blocked</html>"));
         assert!(valid_list(EASYLIST));
         assert!(valid_list(EASYPRIVACY));
+    }
+
+    #[test]
+    fn cache_replacement_is_atomic() {
+        let dir = std::env::temp_dir().join(format!("everglow-cache-test-{}", std::process::id()));
+        let cache = dir.join("adblock-lists.txt");
+        write_cache(&cache, "first").unwrap();
+        write_cache(&cache, "second").unwrap();
+        assert_eq!(std::fs::read_to_string(&cache).unwrap(), "second");
+        assert!(!cache.with_extension("txt.tmp").exists());
+        std::fs::remove_dir_all(dir).unwrap();
     }
 }

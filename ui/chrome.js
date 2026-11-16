@@ -1,5 +1,6 @@
 (() => {
-  if (window !== window.top || !['https://everglow-1c6db.web.app', 'https://everglow-1c6db.firebaseapp.com', '__VERIFY_ORIGIN__'].includes(location.origin)) return;
+  const allowedOrigins = JSON.parse('__EVERGLOW_ORIGINS__');
+  if (window !== window.top || !allowedOrigins.includes(location.origin)) return;
   const mount = () => {
     const host = document.createElement('everglow-titlebar');
     const root = host.attachShadow({ mode: 'open' });
@@ -447,6 +448,14 @@
         updateSubtext.textContent = 'Choose Later to keep watching. Use Check for Updates when you are ready.';
         updateBtnPrimary.textContent = 'Restart to update';
         updateBtnSecondary.textContent = 'Later';
+      } else if (phase === 'installing') {
+        updateChipText.textContent = 'Installing';
+        updateIconWrapper.innerHTML = `<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>`;
+        updateTitle.textContent = 'Installing the update…';
+        updateDesc.textContent = 'Everglow Desktop is finishing the install and will restart shortly.';
+        updateSubtext.textContent = 'You can close this window; the update continues in the background.';
+        updateBtnPrimary.hidden = true;
+        updateBtnSecondary.hidden = true;
       } else if (phase === 'checking') {
         updateChipText.textContent = 'Checking';
         updateIconWrapper.innerHTML = `<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>`;

@@ -144,7 +144,8 @@ pub fn create(app: &AppHandle, profile: &std::path::Path, verify: bool) -> tauri
         })
         .on_page_load(|window, _| sync(window.app_handle()));
     if verify {
-        builder = builder.additional_browser_args(crate::VERIFY_BROWSER_ARGS);
+        let args = crate::blocker::verify_browser_args();
+        builder = builder.additional_browser_args(&args);
     }
     let window = builder.build()?;
     let app = app.clone();

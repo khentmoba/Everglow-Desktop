@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import assert from 'node:assert/strict';
+const debugPort = Number(process.env.EVERGLOW_VERIFY_DEBUG_PORT || 18766);
 const child = spawn(resolve(process.env.DESKTOP_EXE || 'src-tauri/target/debug/everglow-desktop.exe'), ['--verify-live'], { stdio: 'inherit' });
 const delay = ms => new Promise(r => setTimeout(r, ms));
 let ws, id = 0;
@@ -21,7 +22,7 @@ async function evaluate(expression) {
 try {
   let target;
   for(let n=0;n<100;n++) {
-    try { target=(await (await fetch('http://127.0.0.1:18766/json/list')).json()).find(t=>t.type==='page'&&t.url.startsWith('https://everglow-1c6db.web.app/')); if(target)break; }catch{}
+    try { target=(await (await fetch(`http://127.0.0.1:${debugPort}/json/list`)).json()).find(t=>t.type==='page'&&t.url.startsWith('https://everglow-1c6db.web.app/')); if(target)break; }catch{}
     await delay(200);
   }
   assert(target,'live Everglow must open');
