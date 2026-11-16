@@ -41,13 +41,21 @@ impl StartupState {
     }
 
     pub fn is_ready(&self) -> bool {
-        self.status.lock().unwrap().phase == "ready"
+        self.status
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .phase
+            == "ready"
     }
 }
 
 fn sync(app: &AppHandle) {
     let state = app.state::<StartupState>();
-    let status = state.status.lock().unwrap().clone();
+    let status = state
+        .status
+        .lock()
+        .unwrap_or_else(|error| error.into_inner())
+        .clone();
     if let Some(window) = app.get_webview_window("startup") {
         let _ = window.eval(format!(
             "window.dispatchEvent(new CustomEvent('everglow-startup-state', {{detail:{}}}))",
@@ -57,7 +65,10 @@ fn sync(app: &AppHandle) {
 }
 
 pub fn fail(app: &AppHandle, message: &str) {
-    *app.state::<StartupState>().status.lock().unwrap() = Status {
+    *app.state::<StartupState>()
+        .status
+        .lock()
+        .unwrap_or_else(|error| error.into_inner()) = Status {
         phase: "error",
         message: message.into(),
         details: crate::diagnostics::last_error().unwrap_or_default(),
@@ -74,7 +85,10 @@ pub fn fail(app: &AppHandle, message: &str) {
 pub fn connect(window: &WebviewWindow) -> tauri::Result<()> {
     let state = window.state::<StartupState>();
     state.protected.store(true, Ordering::Release);
-    *state.status.lock().unwrap() = Status {
+    *state
+        .status
+        .lock()
+        .unwrap_or_else(|error| error.into_inner()) = Status {
         phase: "loading",
         message: "Connecting to Everglow…".into(),
         details: String::new(),
@@ -109,11 +123,17 @@ fn watch_timeout(app: &AppHandle) {
         .fetch_add(1, Ordering::AcqRel)
         + 1;
     let app = app.clone();
-    std::thread::spawn(move || {
-        std::thread::sleep(std::time::Duration::from_secs(30));
+    // A Tauri task ends with the app; a bare thread would keep an AppHandle alive after exit.
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_secs(30)).await;
         let state = app.state::<StartupState>();
         if state.generation.load(Ordering::Acquire) == generation
-            && state.status.lock().unwrap().phase == "loading"
+            && state
+                .status
+                .lock()
+                .unwrap_or_else(|error| error.into_inner())
+                .phase
+                == "loading"
         {
             log_error!("Everglow did not finish loading within 30 seconds");
             fail(&app, "Everglow is taking longer than expected. Check your internet connection, then try again.");
@@ -227,7 +247,10 @@ pub fn install(
                 return Ok(());
             }
             let state = window.state::<StartupState>();
-            *state.status.lock().unwrap() = Status { phase: "ready", message: String::new(), details: String::new() };
+            *state
+                .status
+                .lock()
+                .unwrap_or_else(|error| error.into_inner()) = Status { phase: "ready", message: String::new(), details: String::new() };
             state.generation.fetch_add(1, Ordering::AcqRel);
             if !state.opened.swap(true, Ordering::AcqRel) {
                 if let Err(error) = crate::desktop::restore_layout(&window) { log_error!("Restore layout: {error}"); }

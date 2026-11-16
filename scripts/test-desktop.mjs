@@ -24,6 +24,11 @@ const server = createServer((req, res) => {
 await new Promise((r, j) => { server.once('error', j); server.listen(port, '127.0.0.1', r); });
 const exe = resolve(process.env.DESKTOP_EXE || 'src-tauri/target/debug/everglow-desktop.exe');
 const settingsDir = mkdtempSync(resolve(tmpdir(), 'everglow-desktop-'));
+// Evidence used to overwrite tracked PNGs in evidence/. Keep generated files outside the repo.
+const evidenceDir = process.env.EVERGLOW_EVIDENCE_DIR
+  || mkdtempSync(resolve(tmpdir(), 'everglow-evidence-'));
+mkdirSync(evidenceDir, { recursive: true });
+const evidence = name => resolve(evidenceDir, name);
 const appEnvironment = { ...process.env, EVERGLOW_VERIFY_DATA_DIR: settingsDir };
 const launch = () => spawn(exe, ['--verify'], { stdio: 'inherit', windowsHide: true, env: appEnvironment });
 let child;
@@ -98,8 +103,7 @@ try {
   await connectTarget(startupTarget);
   for (let n = 0; n < 50 && !await evaluate('!!document.getElementById("heading")'); n++) await delay(100);
   assert.equal(await evaluate('document.getElementById("heading").textContent'), 'Opening Everglow…');
-  mkdirSync('evidence', { recursive: true });
-  writeFileSync('evidence/startup-loading.png', Buffer.from((await cdp('Page.captureScreenshot')).data, 'base64'));
+    writeFileSync(evidence('startup-loading.png'), Buffer.from((await cdp('Page.captureScreenshot')).data, 'base64'));
   results.push('Bundled startup screen renders while protection initializes');
   const target = await waitForTarget(t => t.url.startsWith(`http://127.0.0.1:${port}/`));
   await connectTarget(target);
@@ -195,12 +199,11 @@ try {
   await delay(250);
   assert.equal((await chromeState()).opacity, 1);
   assert.equal((await chromeState()).height, heightBeforeReveal, 'Revealing the overlay never resizes the page');
-  mkdirSync('evidence', { recursive: true });
-  writeFileSync('evidence/topbar-shown.png', Buffer.from((await cdp('Page.captureScreenshot')).data, 'base64'));
+    writeFileSync(evidence('topbar-shown.png'), Buffer.from((await cdp('Page.captureScreenshot')).data, 'base64'));
   await evaluate("document.querySelector('everglow-titlebar').dispatchEvent(new PointerEvent('pointerleave')); true");
   await delay(450);
   assert.equal((await chromeState()).opacity, 0, 'Exit fades completely');
-  writeFileSync('evidence/topbar-hidden.png', Buffer.from((await cdp('Page.captureScreenshot')).data, 'base64'));
+  writeFileSync(evidence('topbar-hidden.png'), Buffer.from((await cdp('Page.captureScreenshot')).data, 'base64'));
   await cdp('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
   assert.equal(await evaluate("getComputedStyle(document.querySelector('everglow-titlebar').shadowRoot.querySelector('.bar')).transform"), 'none', 'Reduced motion avoids sliding');
   await cdp('Emulation.setEmulatedMedia', { features: [] });
@@ -264,12 +267,12 @@ try {
   assert.equal(await evaluate("document.cookie.includes('session_probe=preserved') && localStorage.getItem('session_probe') === 'preserved'"), true);
   await evaluate("fetch('/cache-probe').then(r=>r.text())");
   assert.equal(cacheHits, 2, 'Clearing cached files forces a fresh network request');
-  writeFileSync('evidence/desktop-settings.png', Buffer.from((await cdp('Page.captureScreenshot')).data, 'base64'));
+  writeFileSync(evidence('desktop-settings.png'), Buffer.from((await cdp('Page.captureScreenshot')).data, 'base64'));
   const settingsBounds = windowState();
   execFileSync('powershell', ['-NoProfile', '-File', 'scripts/fullscreen-window.ps1', '-AppProcessId', String(child.pid), '-WindowState', 'Place', '-Width', '420', '-Height', '600'], { windowsHide: true });
   await delay(200);
   assert.equal(await evaluate("(() => { const dialog = document.querySelector('everglow-titlebar').shadowRoot.querySelector('.settings'); return dialog.scrollWidth <= dialog.clientWidth; })()"), true, 'Settings fit the minimum window width');
-  writeFileSync('evidence/desktop-settings-narrow.png', Buffer.from((await cdp('Page.captureScreenshot')).data, 'base64'));
+  writeFileSync(evidence('desktop-settings-narrow.png'), Buffer.from((await cdp('Page.captureScreenshot')).data, 'base64'));
   execFileSync('powershell', ['-NoProfile', '-File', 'scripts/fullscreen-window.ps1', '-AppProcessId', String(child.pid), '-WindowState', 'Place', '-Left', String(settingsBounds.left), '-Top', String(settingsBounds.top), '-Width', String(settingsBounds.width), '-Height', String(settingsBounds.height)], { windowsHide: true });
   await evaluate("document.querySelector('everglow-titlebar').shadowRoot.querySelector('.settings-done').click(); true");
   await movePointer('Content');
@@ -296,7 +299,7 @@ try {
   await evaluate("document.querySelector('everglow-titlebar').shadowRoot.querySelector('.update-close').click(); true");
   await clickControl('menu');
   await delay(500);
-  writeFileSync('evidence/update-menu.png', Buffer.from((await cdp('Page.captureScreenshot')).data, 'base64'));
+  writeFileSync(evidence('update-menu.png'), Buffer.from((await cdp('Page.captureScreenshot')).data, 'base64'));
   results.push('Synthetic update states show a menu badge, download progress, and explicit restart action without opening dialogs');
   await movePointer('Content');
   const restoredBeforeMax = await evaluate('({ w: innerWidth, h: innerHeight })');
@@ -385,7 +388,7 @@ try {
   assert.equal(dropdownInfo.dropdownFont, dropdownInfo.barFont, 'Dropdown typography matches top bar UI');
   assert.equal(dropdownInfo.adblockChecked, 'true', 'Adblock checkmark is visible initially');
   assert.equal(dropdownInfo.itemCount, 8, 'Dropdown includes desktop settings alongside the existing menu items');
-  writeFileSync('evidence/dropdown-shown.png', Buffer.from((await cdp('Page.captureScreenshot')).data, 'base64'));
+  writeFileSync(evidence('dropdown-shown.png'), Buffer.from((await cdp('Page.captureScreenshot')).data, 'base64'));
   await cdp('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape' });
   await delay(150);
   assert.equal(await evaluate("document.querySelector('everglow-titlebar').hasAttribute('menu-open')"), false, 'Escape dismisses dropdown');
@@ -432,7 +435,7 @@ try {
   await connectTarget(startupTarget);
   assert.equal(await evaluate('document.getElementById("heading").textContent'), 'Couldn’t open Everglow');
   assert.equal(await evaluate('document.querySelector(".actions").hidden'), false);
-  writeFileSync('evidence/startup-recovery.png', Buffer.from((await cdp('Page.captureScreenshot')).data, 'base64'));
+  writeFileSync(evidence('startup-recovery.png'), Buffer.from((await cdp('Page.captureScreenshot')).data, 'base64'));
   await evaluate('document.getElementById("retry").click(); true');
   await connectTarget(await waitForTarget(t => t.id === target.id && t.url === `http://127.0.0.1:${port}/`));
   assert(await untilNative(() => windowState().visible), 'Retry restores the protected main window');
@@ -471,7 +474,9 @@ try {
   assert.equal(externalLinks, 'https://external-link-test.invalid/article\n', 'Only the user-clicked link leaves the window');
   results.push('Clicked link on the production page opens in the default browser; script popups stay denied');
 
-  execFileSync('powershell', ['-NoProfile', '-File', 'scripts/fullscreen-window.ps1', '-AppProcessId', String(child.pid), '-WindowState', 'Place'], { windowsHide: true });
+  // The app fits saved bounds into the work area on restore. Use a small position that fits
+  // every CI display so the exact-bounds assertion below is not a screen-size dependency.
+  execFileSync('powershell', ['-NoProfile', '-File', 'scripts/fullscreen-window.ps1', '-AppProcessId', String(child.pid), '-WindowState', 'Place', '-Left', '20', '-Top', '20', '-Width', '700', '-Height', '620'], { windowsHide: true });
   const savedBounds = windowState();
   execFileSync('powershell', ['-NoProfile', '-File', 'scripts/fullscreen-window.ps1', '-AppProcessId', String(child.pid), '-WindowState', 'Maximize'], { windowsHide: true });
   await clickControl('close');
@@ -513,9 +518,9 @@ try {
   assert.equal(child.exitCode, 0);
   results.push('Relaunch restores maximized state and normal bounds; disabling layout uses defaults; pinned-titlebar preference survives relaunch');
 
-  mkdirSync('evidence', { recursive: true });
-  writeFileSync('evidence/native-verification.json', JSON.stringify({ results, adHitsWhileProtected: 0, adHitsWhilePaused: adHits, checkedAt: new Date().toISOString() }, null, 2));
+  writeFileSync(evidence('native-verification.json'), JSON.stringify({ results, adHitsWhileProtected: 0, adHitsWhilePaused: adHits, checkedAt: new Date().toISOString() }, null, 2));
   console.log(results.join('\n'));
+  console.log(`Evidence: ${evidenceDir}`);
 } finally {
   ws?.close();
   if (child && child.exitCode === null) {

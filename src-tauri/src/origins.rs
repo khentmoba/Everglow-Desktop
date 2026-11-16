@@ -10,12 +10,28 @@ pub const HOME: &str = "https://everglow-1c6db.web.app/";
 pub const ORIGINS: [&str; 2] = [PRIMARY, ALTERNATE];
 pub const HOSTS: [&str; 2] = ["everglow-1c6db.web.app", "everglow-1c6db.firebaseapp.com"];
 
+/// Backend hosts needed for sign-in and data access. Requests to these are never ad-blocked;
+/// keep this list in sync with the services the live site actually calls.
+pub const ESSENTIAL_HOSTS: [&str; 4] = [
+    "firestore.googleapis.com",
+    "identitytoolkit.googleapis.com",
+    "securetoken.googleapis.com",
+    "us-central1-everglow-1c6db.cloudfunctions.net",
+];
+
 pub fn allows_host(url: &Url) -> bool {
     url.host_str().is_some_and(|host| HOSTS.contains(&host))
 }
 
 pub fn allows_origin(url: &Url) -> bool {
     ORIGINS.contains(&url.origin().ascii_serialization().as_str())
+}
+
+pub fn is_essential_host(url: &Url) -> bool {
+    allows_host(url)
+        || url
+            .host_str()
+            .is_some_and(|host| ESSENTIAL_HOSTS.contains(&host))
 }
 
 #[cfg(test)]
@@ -38,5 +54,21 @@ mod tests {
         assert!(!allows_origin(
             &Url::parse("http://everglow-1c6db.web.app/").unwrap()
         ));
+    }
+
+    #[test]
+    fn essential_hosts_cover_the_backend_without_lookalikes() {
+        for host in ESSENTIAL_HOSTS {
+            assert!(is_essential_host(
+                &Url::parse(&format!("https://{host}/")).unwrap()
+            ));
+        }
+        for url in [
+            "https://firestore.googleapis.com.evil.test/",
+            "https://us-central1-everglow-1c6db.cloudfunctions.net.evil.test/",
+            "https://evil.test/",
+        ] {
+            assert!(!is_essential_host(&Url::parse(url).unwrap()), "{url}");
+        }
     }
 }

@@ -54,21 +54,8 @@ fn valid_list(text: &str) -> bool {
     text.starts_with("[Adblock Plus") && text.lines().count() > 1000 && text.len() < 8_000_000
 }
 
-fn essential(url: &Url) -> bool {
-    crate::origins::allows_host(url)
-        || matches!(
-            url.host_str(),
-            Some(
-                "firestore.googleapis.com"
-                    | "identitytoolkit.googleapis.com"
-                    | "securetoken.googleapis.com"
-                    | "us-central1-everglow-1c6db.cloudfunctions.net"
-            )
-        )
-}
-
 impl Blocker {
-    pub fn new(cache: &PathBuf, verify: bool) -> Arc<Self> {
+    pub fn new(cache: &Path, verify: bool) -> Arc<Self> {
         let mut text = format!("{EASYLIST}\n{EASYPRIVACY}");
         if let Ok(cached) = std::fs::read_to_string(cache) {
             if valid_list(&cached) {
@@ -93,7 +80,7 @@ impl Blocker {
         let Ok(url) = Url::parse(uri) else {
             return false;
         };
-        if !matches!(url.scheme(), "http" | "https") || essential(&url) {
+        if !matches!(url.scheme(), "http" | "https") || crate::origins::is_essential_host(&url) {
             return false;
         }
         let Ok(request) = Request::new(uri, source, kind) else {
@@ -102,7 +89,7 @@ impl Blocker {
         let blocked = self
             .engine
             .read()
-            .expect("adblock lock")
+            .unwrap_or_else(|error| error.into_inner())
             .check_network_request(&request)
             .matched;
         if blocked {
@@ -136,7 +123,10 @@ impl Blocker {
                 let text = lists.join("\n");
                 let updated = engine(&text);
                 // Build outside the lock so list downloads/parsing never stall the player.
-                *blocker.engine.write().expect("adblock lock") = updated;
+                *blocker
+                    .engine
+                    .write()
+                    .unwrap_or_else(|error| error.into_inner()) = updated;
                 write_cache(&cache, &text)?;
                 Ok(())
             })();
