@@ -228,15 +228,12 @@ pub fn install(
     unsafe {
         let core = view.controller().CoreWebView2()?;
         let source_core = core.clone();
-        let nav_core = core.clone();
         let mut token = 0;
-        let handler_token = std::rc::Rc::new(std::cell::Cell::new(0));
-        let remove_token = handler_token.clone();
         core.add_NavigationCompleted(&NavigationCompletedEventHandler::create(Box::new(move |_, args| {
             let Some(args) = args else { return Ok(()); };
             let mut source = PWSTR::null(); source_core.Source(&mut source)?;
             let Ok(url) = url::Url::parse(&take_pwstr(source)) else { return Ok(()); };
-            if !matches!(url.scheme(), "http" | "https") || !crate::blocker::allow_navigation(&url, verify) { return Ok(()); };
+            if !matches!(url.scheme(), "http" | "https") || !crate::blocker::allow_navigation(&url, verify) { return Ok(()); }
             let mut success = BOOL::default(); args.IsSuccess(&mut success)?;
             let mut status = 0;
             args.cast::<ICoreWebView2NavigationCompletedEventArgs2>()?.HttpStatusCode(&mut status)?;
@@ -257,13 +254,11 @@ pub fn install(
             state.generation.fetch_add(1, Ordering::AcqRel);
             if !state.opened.swap(true, Ordering::AcqRel) {
                 if let Err(error) = crate::desktop::restore_layout(&window) { log_error!("Restore layout: {error}"); }
-                let _ = nav_core.remove_NavigationCompleted(remove_token.get());
             }
             let _ = window.show();
             if let Some(startup) = window.app_handle().get_webview_window("startup") { let _ = startup.hide(); }
             Ok(())
         })), &mut token)?;
-        handler_token.set(token);
     }
     Ok(())
 }
