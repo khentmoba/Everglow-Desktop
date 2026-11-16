@@ -1029,6 +1029,7 @@ dependencies = [
  "tauri-build",
  "tauri-plugin-single-instance",
  "tauri-plugin-updater",
+ "tokio",
  "ureq",
  "url",
  "webview2-com",

@@ -6,6 +6,7 @@ use windows::{
     core::Interface,
     Win32::UI::WindowsAndMessaging::{
         GetWindowPlacement, SetWindowPlacement, SW_SHOWMAXIMIZED, SW_SHOWNORMAL, WINDOWPLACEMENT,
+        WPF_RESTORETOMAXIMIZED,
     },
 };
 
@@ -60,7 +61,10 @@ impl DesktopState {
     }
 
     pub fn preferences(&self) -> Preferences {
-        self.preferences.lock().unwrap().clone()
+        self.preferences
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .clone()
     }
 
     fn write(&self, preferences: &Preferences) -> Result<(), Box<dyn std::error::Error>> {
@@ -71,7 +75,10 @@ impl DesktopState {
     }
 
     pub fn toggle(&self, titlebar: bool) -> Result<(), Box<dyn std::error::Error>> {
-        let mut preferences = self.preferences.lock().unwrap();
+        let mut preferences = self
+            .preferences
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
         let mut next = preferences.clone();
         if titlebar {
             next.always_show_titlebar = !next.always_show_titlebar;
@@ -113,8 +120,11 @@ impl Layout {
 
 pub fn save_layout<R: tauri::Runtime>(window: &WebviewWindow<R>) {
     let state = window.state::<DesktopState>();
-    let mut preferences = state.preferences.lock().unwrap();
-    if !preferences.remember_layout || window.is_fullscreen().unwrap_or(true) {
+    let mut preferences = state
+        .preferences
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    if !preferences.remember_layout || window.is_fullscreen().unwrap_or(false) {
         return;
     }
     let result = (|| -> Result<(), Box<dyn std::error::Error>> {
@@ -131,7 +141,8 @@ pub fn save_layout<R: tauri::Runtime>(window: &WebviewWindow<R>) {
             top: rect.top,
             width: (rect.right - rect.left).max(420) as u32,
             height: (rect.bottom - rect.top).max(600) as u32,
-            maximized: placement.showCmd == SW_SHOWMAXIMIZED.0 as u32 || placement.flags.0 & 2 != 0,
+            maximized: placement.showCmd == SW_SHOWMAXIMIZED.0 as u32
+                || placement.flags.0 & WPF_RESTORETOMAXIMIZED.0 != 0,
         });
         state.write(&preferences)
     })();

@@ -30,10 +30,24 @@ pub struct UpdateState {
 
 impl UpdateState {
     pub fn status(&self) -> Status {
-        let mut status = self.status.lock().unwrap().clone();
-        status.action = if self.ready.lock().unwrap().is_some() {
+        let mut status = self
+            .status
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .clone();
+        status.action = if self
+            .ready
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .is_some()
+        {
             "install"
-        } else if self.available.lock().unwrap().is_some() {
+        } else if self
+            .available
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .is_some()
+        {
             "download"
         } else {
             "check"
@@ -56,7 +70,10 @@ fn publish<R: Runtime>(
     progress: Option<u64>,
     message: String,
 ) {
-    *app.state::<UpdateState>().status.lock().unwrap() = Status {
+    *app.state::<UpdateState>()
+        .status
+        .lock()
+        .unwrap_or_else(|error| error.into_inner()) = Status {
         phase,
         version,
         progress,
@@ -102,7 +119,17 @@ type UpdateResult = Result<(), Box<dyn std::error::Error + Send + Sync>>;
 
 async fn check<R: Runtime>(app: &AppHandle<R>) -> UpdateResult {
     let state = app.state::<UpdateState>();
-    if state.ready.lock().unwrap().is_some() || state.available.lock().unwrap().is_some() {
+    if state
+        .ready
+        .lock()
+        .unwrap_or_else(|error| error.into_inner())
+        .is_some()
+        || state
+            .available
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .is_some()
+    {
         return Ok(());
     }
     publish(
@@ -120,7 +147,10 @@ async fn check<R: Runtime>(app: &AppHandle<R>) -> UpdateResult {
         .await?;
     if let Some(update) = update {
         let version = update.version.clone();
-        *state.available.lock().unwrap() = Some(update);
+        *state
+            .available
+            .lock()
+            .unwrap_or_else(|error| error.into_inner()) = Some(update);
         publish(
             app,
             "available",
@@ -142,7 +172,11 @@ async fn check<R: Runtime>(app: &AppHandle<R>) -> UpdateResult {
 
 async fn download<R: Runtime>(app: &AppHandle<R>) -> UpdateResult {
     let state = app.state::<UpdateState>();
-    let update = state.available.lock().unwrap().clone();
+    let update = state
+        .available
+        .lock()
+        .unwrap_or_else(|error| error.into_inner())
+        .clone();
     let Some(mut update) = update else {
         return Ok(());
     };
@@ -180,8 +214,14 @@ async fn download<R: Runtime>(app: &AppHandle<R>) -> UpdateResult {
             || {},
         )
         .await?;
-    *state.ready.lock().unwrap() = Some((update, bytes));
-    *state.available.lock().unwrap() = None;
+    *state
+        .ready
+        .lock()
+        .unwrap_or_else(|error| error.into_inner()) = Some((update, bytes));
+    *state
+        .available
+        .lock()
+        .unwrap_or_else(|error| error.into_inner()) = None;
     publish(
         app,
         "ready",
@@ -193,7 +233,12 @@ async fn download<R: Runtime>(app: &AppHandle<R>) -> UpdateResult {
 }
 
 fn install<R: Runtime>(app: &AppHandle<R>) -> UpdateResult {
-    let ready = app.state::<UpdateState>().ready.lock().unwrap().take();
+    let ready = app
+        .state::<UpdateState>()
+        .ready
+        .lock()
+        .unwrap_or_else(|error| error.into_inner())
+        .take();
     let Some((update, bytes)) = ready else {
         return Ok(());
     };
@@ -208,7 +253,10 @@ fn install<R: Runtime>(app: &AppHandle<R>) -> UpdateResult {
         crate::desktop::save_layout(&window);
     }
     if let Err(error) = update.install(&bytes) {
-        *app.state::<UpdateState>().ready.lock().unwrap() = Some((update, bytes));
+        *app.state::<UpdateState>()
+            .ready
+            .lock()
+            .unwrap_or_else(|error| error.into_inner()) = Some((update, bytes));
         return Err(error.into());
     }
     app.restart();
@@ -219,8 +267,9 @@ pub fn check_on_startup<R: Runtime>(app: &AppHandle<R>, verify: bool) {
         return;
     }
     let app = app.clone();
-    std::thread::spawn(move || {
-        std::thread::sleep(Duration::from_secs(10));
+    // Tauri cancels this task on exit; a bare thread would keep an AppHandle alive after shutdown.
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(Duration::from_secs(10)).await;
         check_for_updates(&app, false);
     });
 }
