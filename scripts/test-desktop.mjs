@@ -474,7 +474,9 @@ try {
   assert.equal(externalLinks, 'https://external-link-test.invalid/article\n', 'Only the user-clicked link leaves the window');
   results.push('Clicked link on the production page opens in the default browser; script popups stay denied');
 
-  execFileSync('powershell', ['-NoProfile', '-File', 'scripts/fullscreen-window.ps1', '-AppProcessId', String(child.pid), '-WindowState', 'Place'], { windowsHide: true });
+  // The app fits saved bounds into the work area on restore. Use a small position that fits
+  // every CI display so the exact-bounds assertion below is not a screen-size dependency.
+  execFileSync('powershell', ['-NoProfile', '-File', 'scripts/fullscreen-window.ps1', '-AppProcessId', String(child.pid), '-WindowState', 'Place', '-Left', '20', '-Top', '20', '-Width', '700', '-Height', '620'], { windowsHide: true });
   const savedBounds = windowState();
   execFileSync('powershell', ['-NoProfile', '-File', 'scripts/fullscreen-window.ps1', '-AppProcessId', String(child.pid), '-WindowState', 'Maximize'], { windowsHide: true });
   await clickControl('close');
@@ -516,7 +518,7 @@ try {
   assert.equal(child.exitCode, 0);
   results.push('Relaunch restores maximized state and normal bounds; disabling layout uses defaults; pinned-titlebar preference survives relaunch');
 
-    writeFileSync(evidence('native-verification.json'), JSON.stringify({ results, adHitsWhileProtected: 0, adHitsWhilePaused: adHits, checkedAt: new Date().toISOString() }, null, 2));
+  writeFileSync(evidence('native-verification.json'), JSON.stringify({ results, adHitsWhileProtected: 0, adHitsWhilePaused: adHits, checkedAt: new Date().toISOString() }, null, 2));
   console.log(results.join('\n'));
   console.log(`Evidence: ${evidenceDir}`);
 } finally {

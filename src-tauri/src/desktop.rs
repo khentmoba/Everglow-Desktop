@@ -298,6 +298,19 @@ mod tests {
             Some(layout)
         );
     }
+
+    #[test]
+    fn verification_fixture_bounds_survive_a_small_ci_work_area() {
+        // The native test places the window here before checking exact restore bounds.
+        let layout = Layout {
+            left: 20,
+            top: 20,
+            width: 700,
+            height: 620,
+            maximized: true,
+        };
+        assert_eq!(layout.fit(&[(0, 0, 1024, 720)]), Some(layout));
+    }
     #[test]
     fn preferences_keep_defaults_for_missing_fields_and_reject_invalid_json() {
         let preferences: Preferences = serde_json::from_str("{}").unwrap();
