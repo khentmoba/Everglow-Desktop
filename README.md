@@ -1,6 +1,6 @@
 # Everglow Desktop
 
-Windows Tauri 2 app loading https://everglow-1c6db.web.app/ in its own window.
+Windows Tauri 2 app loading https://everglow-1c6db.web.app/ in its own window. Current release: 0.6.0.
 
 ## Use
 Open **Everglow Desktop** on the desktop or Start menu. Sign in normally; this app has its own persistent browser profile and does not borrow browser cookies.
@@ -33,7 +33,7 @@ Everglow loads from the live website, not a frozen Flutter bundle. Its existing 
 
 The desktop app itself updates natively since 0.2.0. Version 0.3.0 connects the website entrance and Dashboard to that same updater. It checks about 10 seconds after launch, or on demand through **Everglow > Check for Updates** and the website's **Check for desktop updates** button.
 
-Automatic update checks are silent. An available update adds a small badge to the Everglow menu; opening the menu offers **Download update**, inline download progress, and then **Restart to update**. A manual check opens the menu to show its result. Downloading never restarts the app, and no update dialogs interrupt playback. Only the explicit restart action installs the signature-verified download.
+Automatic update checks are silent. An available update adds a small badge to the Everglow menu and opens an Everglow-styled update card with **Download update**, inline download progress, and then **Restart to update**. The card stays out of the way during fullscreen video and can be dismissed with **Later**; reopening the menu always shows the current action. A manual check opens the menu to show its result. Downloading never restarts the app, and no update dialogs interrupt playback. Only the explicit restart action installs the signature-verified download.
 
 The verified download stays in memory until the app closes. Duplicate requests cannot start simultaneous operations. Failed downloads never become installable, and failed installation retains the verified download for another attempt. All update errors appear in the menu with a retry action.
 
@@ -45,7 +45,7 @@ After publishing, the release workflow sets the GitHub release notes from `CHANG
 
 Stable website download: https://github.com/khentmoba/Everglow-Desktop/releases/latest/download/Everglow-Desktop-Setup.exe
 
-### Installer updates (0.3.1)
+### Installer updates
 
 Opening a newer Windows installer detects the existing installation and shows one **Update** button. It replaces the app files in the registered location without launching the old uninstaller or asking for the folder again. Sign-in data and existing shortcuts stay in place. The same version offers **Repair**; an older installer refuses to downgrade. In-app updates retain the existing passive progress flow and signature verification. Uninstall remains available through Windows Settings.
 
@@ -60,10 +60,10 @@ npm run build -- --config scripts/installer-test.json
 
 This uses a separate product name, installation folder and fake data. It checks fresh install, passive upgrade without a usable old uninstaller, same-version repair, preserved data/shortcuts/location, and silent downgrade refusal. It never launches the installed app or reads a real session. Desktop PR CI builds and runs this fixture too.
 
-**Rollout order:** merge and release desktop 0.3.0 first; verify that the stable installer and `latest.json` are anonymously accessible; then merge the website buttons. Existing 0.2.0 users get 0.3.0 through the native menu/startup updater. Version 0.1.0 has no updater and needs one manual installation. The updater signature is separate from Windows Authenticode; this project does not claim a Windows-code-signed installer. Preserve the existing signing key in the repository secret; never rotate it as part of this feature.
+**Upgrade paths:** releases from 0.2.0 onward update through the in-app menu or the startup check. Version 0.1.0 has no updater and needs one manual installation. The updater signature is separate from Windows Authenticode; this project does not claim a Windows-code-signed installer. Preserve the existing signing key in the repository secret; never rotate it as part of a feature change.
 
 ## Source/build
-Source is independent of the Everglow website at `C:\APPLICATIONS\Everglow-Desktop`; no live website files were changed.
+The desktop source is independent of the Everglow website; no live website files are changed here.
 
 Prerequisites: Node.js, Rust MSVC toolchain, Visual Studio C++ build tools, current Microsoft Edge WebView2 Runtime.
 
@@ -87,6 +87,8 @@ The installer is a local unsigned build, not a public Windows-code-signed releas
 `npm test` launches fake pages in a new isolated WebView2 profile and checks native request blocking, cross-origin iframe cosmetic filtering, a real bundled filemoon.* anti-ad scriptlet, popup/redirect denial, unprivileged remote content, fullscreen, and the native menu's pause/resume behavior.
 
 It also exercises real mouse dragging, second-launch activation, saved and disabled window layouts across relaunches, settings at normal and minimum window sizes, cache invalidation with preserved cookies/local storage, HTTP-error recovery and retry, synthetic update-menu states, hover reveal, animation progress, unchanged page size, reduced motion, keyboard access, and maximized/fullscreen behavior. If another local project uses the fixture port, set `EVERGLOW_VERIFY_PORT` to a free port before running the tests. This override applies only to explicit verification runs.
+
+`npm test` runs in the Desktop checks workflow on every pull request, so blocking, recovery, window behavior, and update UI are verified before merge. Screenshots go to a temporary directory (override with `EVERGLOW_EVIDENCE_DIR`) instead of overwriting the tracked evidence files.
 
 `node scripts/verify-live.mjs` checks the unauthenticated live Everglow startup and captures `evidence/live-login.png`. Both runners accept `DESKTOP_EXE` to test the installed release rather than the debug build. Debugging is exposed only with explicit verification flags, with isolated profiles; normal runs expose no debug port.
 

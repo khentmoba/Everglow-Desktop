@@ -4,6 +4,13 @@ Each release needs a `## [X.Y.Z]` section with user-facing `- ` bullets before i
 The release workflow publishes this section as the GitHub release notes and the Discord "What's New" field.
 Write plain-English changes, not commit subjects.
 
+## [Unreleased]
+
+- CI now runs the full native WebView2 verification suite on every pull request.
+- Backend hosts required for sign-in are defined once and covered by tests.
+- Startup timers and update checks shut down with the app instead of running in detached threads.
+- Generated test screenshots no longer overwrite the tracked evidence files.
+
 ## [0.6.0] - 2026-11-07
 
 - **Desktop updates:** Added an in-app update banner and download dialog that matches Everglow styling.
@@ -20,3 +27,28 @@ Write plain-English changes, not commit subjects.
 - Added a startup recovery screen with a Retry button when the site cannot load.
 - Opening the app again now focuses the existing window.
 - Desktop updates now use menu controls for downloading and restarting, without interrupting playback with dialogs.
+
+## [0.4.1] - 2026-10-20
+
+- Fixed release publication so GitHub release notes are set correctly.
+- Release announcements in Discord now show the changelog and a richer release card.
+
+## [0.4.0] - 2026-10-20
+
+- Added a smooth, auto-hiding title bar that appears when the pointer moves to the top edge.
+
+## [0.3.2] - 2026-10-19
+
+- The native menu now stays hidden while a video is fullscreen.
+
+## [0.3.1] - 2026-10-14
+
+- Newer installers update an existing Windows installation in place without downgrading or deleting saved sign-in data.
+
+## [0.3.0] - 2026-10-14
+
+- Website update buttons now hand off to the native updater, and restarts wait until you choose them.
+
+## [0.2.0] - 2026-10-05
+
+- Added signed native auto-updates through GitHub releases.
