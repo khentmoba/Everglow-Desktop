@@ -165,5 +165,7 @@ try {
         Invoke-RestMethod -Uri "$env:DISCORD_WEBHOOK_URL${separator}wait=true" -Method Post -ContentType 'application/json' -Body ([Text.Encoding]::UTF8.GetBytes($jsonString)) | Out-Null
     }
 } catch {
-    throw 'Discord notification failed. The release is already published; check the webhook secret before retrying.'
+    # Keep the cause for retries, but never echo the webhook URL back into the log.
+    $detail = $_.Exception.Message -replace [regex]::Escape($env:DISCORD_WEBHOOK_URL), '<webhook>'
+    throw "Discord notification failed. Detail: $detail. The release is already published; check the webhook secret before retrying."
 }
