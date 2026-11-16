@@ -151,6 +151,7 @@ pub fn set_enabled(window: WebviewWindow, enabled: bool) -> tauri::Result<()> {
                                     },
                                 )),
                             )?;
+                            break;
                         }
                     }
                     Ok(())

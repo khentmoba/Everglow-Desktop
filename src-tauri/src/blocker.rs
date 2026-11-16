@@ -46,6 +46,8 @@ pub struct Blocker {
     pub popups: AtomicUsize,
 }
 
+const CACHE_TTL: Duration = Duration::from_secs(24 * 60 * 60);
+
 fn engine(text: &str) -> Engine {
     Engine::from_rules(text.lines(), ParseOptions::default())
 }
@@ -54,14 +56,19 @@ fn valid_list(text: &str) -> bool {
     text.starts_with("[Adblock Plus") && text.lines().count() > 1000 && text.len() < 8_000_000
 }
 
+fn cache_is_fresh(cache: &Path, now: std::time::SystemTime) -> bool {
+    std::fs::metadata(cache)
+        .and_then(|meta| meta.modified())
+        .and_then(|modified| now.duration_since(modified).map_err(std::io::Error::other))
+        .is_ok_and(|age| age < CACHE_TTL)
+}
+
 impl Blocker {
     pub fn new(cache: &Path, verify: bool) -> Arc<Self> {
-        let mut text = format!("{EASYLIST}\n{EASYPRIVACY}");
-        if let Ok(cached) = std::fs::read_to_string(cache) {
-            if valid_list(&cached) {
-                text = cached;
-            }
-        }
+        let mut text = std::fs::read_to_string(cache)
+            .ok()
+            .filter(|cached| valid_list(cached))
+            .unwrap_or_else(|| format!("{EASYLIST}\n{EASYPRIVACY}"));
         if verify {
             text.push_str("\n/desktop-ad-probe\n");
         }
@@ -99,6 +106,9 @@ impl Blocker {
     }
 
     pub fn refresh(self: &Arc<Self>, cache: PathBuf) {
+        if cache_is_fresh(&cache, std::time::SystemTime::now()) {
+            return;
+        }
         let blocker = Arc::clone(self);
         std::thread::spawn(move || {
             let result = (|| -> Result<(), Box<dyn std::error::Error>> {
@@ -219,6 +229,21 @@ mod tests {
         write_cache(&cache, "second").unwrap();
         assert_eq!(std::fs::read_to_string(&cache).unwrap(), "second");
         assert!(!cache.with_extension("txt.tmp").exists());
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn cache_freshness_respects_ttl() {
+        let dir = std::env::temp_dir().join(format!("everglow-ttl-test-{}", std::process::id()));
+        let cache = dir.join("adblock-lists.txt");
+        assert!(!cache_is_fresh(&cache, std::time::SystemTime::now()));
+        write_cache(&cache, "rules").unwrap();
+        let now = std::time::SystemTime::now();
+        assert!(cache_is_fresh(&cache, now));
+        assert!(!cache_is_fresh(
+            &cache,
+            now + CACHE_TTL + Duration::from_secs(1)
+        ));
         std::fs::remove_dir_all(dir).unwrap();
     }
 }

@@ -407,7 +407,18 @@
     const updateCloseBtn = root.querySelector('.update-close');
     const updateIconWrapper = root.querySelector('.update-icon-wrapper');
     let currentUpdate = null;
-    let dismissedUpdateKey = null;
+    let lastRenderedPhase = null;
+    const DISMISSED_KEY = 'everglow-dismissed-update';
+    const getDismissed = () => { try { return sessionStorage.getItem(DISMISSED_KEY); } catch { return null; } };
+    const setDismissed = key => { try { if (key) sessionStorage.setItem(DISMISSED_KEY, key); } catch {} };
+    let dismissedUpdateKey = getDismissed();
+
+    const setUpdateIcon = (phase, svg) => {
+      if (lastRenderedPhase !== phase) {
+        lastRenderedPhase = phase;
+        updateIconWrapper.innerHTML = svg;
+      }
+    };
 
     const renderUpdatePrompt = update => {
       if (!update) return;
@@ -422,7 +433,7 @@
 
       if (phase === 'available') {
         updateChipText.textContent = 'Update Available';
-        updateIconWrapper.innerHTML = `<svg viewBox="0 0 24 24"><path d="M12 3v13m0 0-4-4m4 4 4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>`;
+        setUpdateIcon(phase, `<svg viewBox="0 0 24 24"><path d="M12 3v13m0 0-4-4m4 4 4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>`);
         updateTitle.textContent = version ? `Everglow Desktop ${version}` : 'New Update Available';
         updateDesc.textContent = version ? `Everglow Desktop ${version} is available. Download when you’re ready.` : 'A new update is available for Everglow Desktop.';
         updateSubtext.textContent = 'Keep watching; downloading happens in the background without restarting.';
@@ -430,7 +441,7 @@
         updateBtnSecondary.textContent = 'Later';
       } else if (phase === 'downloading') {
         updateChipText.textContent = 'Downloading';
-        updateIconWrapper.innerHTML = `<svg viewBox="0 0 24 24"><path d="M12 3v13m0 0-4-4m4 4 4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>`;
+        setUpdateIcon(phase, `<svg viewBox="0 0 24 24"><path d="M12 3v13m0 0-4-4m4 4 4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>`);
         updateTitle.textContent = version ? `Downloading ${version}…` : 'Downloading update…';
         updateDesc.textContent = update.message || 'Downloading update… Keep watching; nothing will restart.';
         updateSubtext.textContent = 'You can safely keep browsing or watching movies.';
@@ -442,7 +453,7 @@
         updateBtnSecondary.textContent = 'Keep watching in background';
       } else if (phase === 'ready') {
         updateChipText.textContent = 'Update Ready';
-        updateIconWrapper.innerHTML = `<svg viewBox="0 0 24 24"><path d="m5 13 4 4L19 7"/></svg>`;
+        setUpdateIcon(phase, `<svg viewBox="0 0 24 24"><path d="m5 13 4 4L19 7"/></svg>`);
         updateTitle.textContent = version ? `Everglow Desktop ${version}` : 'Update Ready to Install';
         updateDesc.textContent = version ? `Everglow Desktop ${version} is downloaded and verified. Restart to install it?` : 'Desktop update is downloaded and verified. Restart to install it?';
         updateSubtext.textContent = 'Choose Later to keep watching. Use Check for Updates when you are ready.';
@@ -450,7 +461,7 @@
         updateBtnSecondary.textContent = 'Later';
       } else if (phase === 'installing') {
         updateChipText.textContent = 'Installing';
-        updateIconWrapper.innerHTML = `<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>`;
+        setUpdateIcon(phase, `<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>`);
         updateTitle.textContent = 'Installing the update…';
         updateDesc.textContent = 'Everglow Desktop is finishing the install and will restart shortly.';
         updateSubtext.textContent = 'You can close this window; the update continues in the background.';
@@ -458,7 +469,7 @@
         updateBtnSecondary.hidden = true;
       } else if (phase === 'checking') {
         updateChipText.textContent = 'Checking';
-        updateIconWrapper.innerHTML = `<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>`;
+        setUpdateIcon(phase, `<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>`);
         updateTitle.textContent = 'Checking for updates…';
         updateDesc.textContent = 'Looking for the latest version of Everglow Desktop…';
         updateSubtext.textContent = 'Checking GitHub releases and signatures…';
@@ -466,7 +477,7 @@
         updateBtnSecondary.textContent = 'Cancel';
       } else if (phase === 'current') {
         updateChipText.textContent = 'Up to Date';
-        updateIconWrapper.innerHTML = `<svg viewBox="0 0 24 24"><path d="m12 2 2.8 6.2 6.7.6-5 4.6 1.4 6.6-5.9-3.4-5.9 3.4 1.4-6.6-5-4.6 6.7-.6z"/></svg>`;
+        setUpdateIcon(phase, `<svg viewBox="0 0 24 24"><path d="m12 2 2.8 6.2 6.7.6-5 4.6 1.4 6.6-5.9-3.4-5.9 3.4 1.4-6.6-5-4.6 6.7-.6z"/></svg>`);
         updateTitle.textContent = 'You’re on the latest version';
         updateDesc.textContent = 'You’re enjoying the newest features and protections in Everglow Desktop.';
         updateSubtext.textContent = 'Automatic checks will let you know when the next update arrives.';
@@ -474,12 +485,14 @@
         updateBtnPrimary.textContent = 'Done';
       } else if (phase === 'error') {
         updateChipText.textContent = 'Notice';
-        updateIconWrapper.innerHTML = `<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v4m0 4h.01"/></svg>`;
-        updateTitle.textContent = 'Could not check for updates';
+        setUpdateIcon(phase, `<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v4m0 4h.01"/></svg>`);
+        const canRetry = update.action === 'download' || update.action === 'install';
+        updateTitle.textContent = update.action === 'download' ? 'Download failed' : update.action === 'install' ? 'Install failed' : 'Could not check for updates';
         updateDesc.textContent = update.message || 'Could not complete the update. Your current app is unchanged.';
         updateSubtext.textContent = 'Please check your internet connection and try again later.';
-        updateBtnSecondary.hidden = true;
-        updateBtnPrimary.textContent = 'Done';
+        updateBtnSecondary.hidden = !canRetry;
+        updateBtnSecondary.textContent = 'Later';
+        updateBtnPrimary.textContent = canRetry ? 'Retry' : 'Done';
       }
     };
 
@@ -499,6 +512,7 @@
       }
       if (userDismissed && currentUpdate) {
         dismissedUpdateKey = `${currentUpdate.phase}:${currentUpdate.version || ''}`;
+        setDismissed(dismissedUpdateKey);
       }
     };
 
@@ -511,6 +525,8 @@
       } else if (phase === 'ready') {
         send('update:install');
         renderUpdatePrompt({ ...currentUpdate, phase: 'installing' });
+      } else if (phase === 'error' && (currentUpdate.action === 'download' || currentUpdate.action === 'install')) {
+        send(`update:${currentUpdate.action}`);
       } else {
         closeUpdateDialog();
       }
