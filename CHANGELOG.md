@@ -6,9 +6,12 @@ Write plain-English changes, not commit subjects.
 
 ## [Unreleased]
 
-- CI now runs the full native WebView2 verification suite on every pull request.
-- Backend hosts required for sign-in are defined once and covered by tests.
-- Startup timers and update checks shut down with the app instead of running in detached threads.
+## [0.6.1] - 2026-11-17
+
+- Fullscreen transitions no longer flicker or resize the window through intermediate sizes.
+- Startup timers and update checks now shut down with the app instead of running in detached threads.
+- Backend hosts required for sign-in are defined in one place and covered by tests.
+- CI runs the full native WebView2 verification suite on every pull request.
 - Generated test screenshots no longer overwrite the tracked evidence files.
 
 ## [0.6.0] - 2026-11-07
